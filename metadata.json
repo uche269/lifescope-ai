@@ -1,0 +1,7 @@
+{
+  "name": "LifeScope AI",
+  "description": "A comprehensive dashboard for personal and professional goal tracking, self-development, and AI-powered life management.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
