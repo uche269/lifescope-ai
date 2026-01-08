@@ -19,25 +19,6 @@ const MainApp: React.FC = () => {
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
-        <h1 className="text-2xl font-bold text-red-500">DEBUG: AUTH LOADING...</h1>
-        <p className="text-slate-400">If this persists, Supabase connection is hanging.</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    return (
-      <>
-        <div className="fixed top-0 left-0 bg-red-500 text-white p-2 z-50">DEBUG: NO USER FOUND - VIEWING LOGIN</div>
-        <Login />
-      </>
-    );
-  }
-
   // Initial Mock Data (used for seeding)
   const INITIAL_GOALS_TEMPLATE = [
     {
@@ -64,35 +45,6 @@ const MainApp: React.FC = () => {
       ]
     }
   ];
-
-  const fetchGoals = async () => {
-    if (!user) return;
-
-    try {
-      const { data, error } = await supabase
-        .from('goals')
-        .select(`
-                *,
-                activities (*)
-            `)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
-
-      if (data && data.length > 0) {
-        // Transform data to match Goal interface if needed (Supabase returns arrays)
-        // Ensure activities are sorted or formatted correctly
-        setGoals(data as Goal[]);
-      } else {
-        // Auto-seed if empty
-        await seedInitialData();
-      }
-    } catch (err) {
-      console.error("Error fetching goals:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const seedInitialData = async () => {
     if (!user) return;
@@ -152,6 +104,35 @@ const MainApp: React.FC = () => {
     setGoals(newGoals);
   };
 
+  const fetchGoals = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('goals')
+        .select(`
+                *,
+                activities (*)
+            `)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Transform data to match Goal interface if needed (Supabase returns arrays)
+        // Ensure activities are sorted or formatted correctly
+        setGoals(data as Goal[]);
+      } else {
+        // Auto-seed if empty
+        await seedInitialData();
+      }
+    } catch (err) {
+      console.error("Error fetching goals:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     fetchGoals();
   }, [user]);
@@ -176,6 +157,25 @@ const MainApp: React.FC = () => {
         return <Dashboard goals={goals} />;
     }
   };
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
+        <h1 className="text-2xl font-bold text-red-500">DEBUG: AUTH LOADING...</h1>
+        <p className="text-slate-400">If this persists, Supabase connection is hanging.</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <>
+        <div className="fixed top-0 left-0 bg-red-500 text-white p-2 z-50">DEBUG: NO USER FOUND - VIEWING LOGIN</div>
+        <Login />
+      </>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
