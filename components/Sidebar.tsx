@@ -1,10 +1,10 @@
 import React from 'react';
-import { 
-  LayoutDashboard, 
-  Target, 
-  BrainCircuit, 
-  Newspaper, 
-  FileText, 
+import {
+  LayoutDashboard,
+  Target,
+  BrainCircuit,
+  Newspaper,
+  FileText,
   Settings,
   HeartPulse
 } from 'lucide-react';
@@ -15,7 +15,7 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
-  
+
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'goals', label: 'Goals & Projects', icon: Target },
@@ -44,30 +44,25 @@ const Sidebar: React.FC<SidebarProps> = ({ currentView, setView }) => {
             <button
               key={item.id}
               onClick={() => setView(item.id)}
-              className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-200 group ${
-                isActive 
-                  ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' 
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
-              }`}
+              className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${isActive
+                ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+                : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                }`}
             >
-              <Icon className={`w-5 h-5 ${isActive ? 'text-indigo-400 drop-shadow-[0_0_8px_rgba(99,102,241,0.5)]' : 'group-hover:text-white'}`} />
+              <Icon className={`w-5 h-5 ${isActive ? 'text-white' : 'group-hover:text-white'}`} />
               <span className="font-medium text-sm">{item.label}</span>
-              {isActive && (
-                <div className="ml-auto w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />
-              )}
             </button>
           );
         })}
       </nav>
 
       <div className="p-4 border-t border-slate-900 space-y-2">
-        <button 
+        <button
           onClick={() => setView('settings')}
-          className={`flex items-center gap-3 px-4 py-3 transition-colors w-full rounded-xl ${
-            currentView === 'settings' 
-            ? 'bg-indigo-600/10 text-indigo-400 border border-indigo-500/20' 
-            : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'
-          }`}
+          className={`flex items-center gap-3 px-4 py-3 transition-colors w-full rounded-lg ${currentView === 'settings'
+              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
+              : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'
+            }`}
         >
           <Settings className="w-5 h-5" />
           <span className="text-sm font-medium">Settings</span>

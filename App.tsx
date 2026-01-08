@@ -162,18 +162,13 @@ const MainApp: React.FC = () => {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
-        <h1 className="text-2xl font-bold text-red-500">DEBUG: AUTH LOADING...</h1>
-        <p className="text-slate-400">If this persists, Supabase connection is hanging.</p>
       </div>
     );
   }
 
   if (!user) {
     return (
-      <>
-        <div className="fixed top-0 left-0 bg-red-500 text-white p-2 z-50">DEBUG: NO USER FOUND - VIEWING LOGIN</div>
-        <Login />
-      </>
+      <Login />
     );
   }
 
