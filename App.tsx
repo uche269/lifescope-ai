@@ -9,45 +9,152 @@ import Settings from './components/Settings';
 import Health from './components/Health';
 import { Goal, GoalCategory } from './types';
 
-// Initial Mock Data
-const INITIAL_GOALS: Goal[] = [
-  {
-    id: '1',
-    title: 'Lose 5kg by December',
-    category: GoalCategory.HEALTH,
-    priority: 'Medium',
-    description: 'Gym and Diet plan',
-    progress: 65,
-    status: 'In Progress',
-    activities: [
-        { id: 'a1', name: 'Morning Cardio', isCompleted: true, frequency: 'Daily' },
-        { id: 'a2', name: 'No Sugar', isCompleted: false, frequency: 'Daily' }
-    ]
-  },
-  {
-    id: '2',
-    title: 'Save CAD $15,000',
-    category: GoalCategory.RELOCATION,
-    priority: 'High',
-    description: 'Relocation fund',
-    progress: 40,
-    status: 'In Progress',
-    activities: [
-        { id: 'b1', name: 'Transfer to FX Account', isCompleted: true, frequency: 'Monthly' }
-    ]
-  }
-];
+import Login from './components/Login';
+import { supabase } from './lib/supabase';
+import { useAuth } from './contexts/AuthContext';
 
 const MainApp: React.FC = () => {
+  const { user, loading: authLoading } = useAuth();
   const [currentView, setCurrentView] = useState('dashboard');
-  const [goals, setGoals] = useState<Goal[]>(() => {
-      const saved = localStorage.getItem('ls_goals');
-      return saved ? JSON.parse(saved) : INITIAL_GOALS;
-  });
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-500 mb-4"></div>
+        <h1 className="text-2xl font-bold text-red-500">DEBUG: AUTH LOADING...</h1>
+        <p className="text-slate-400">If this persists, Supabase connection is hanging.</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <>
+        <div className="fixed top-0 left-0 bg-red-500 text-white p-2 z-50">DEBUG: NO USER FOUND - VIEWING LOGIN</div>
+        <Login />
+      </>
+    );
+  }
+
+  // Initial Mock Data (used for seeding)
+  const INITIAL_GOALS_TEMPLATE = [
+    {
+      title: 'Lose 5kg by December',
+      category: GoalCategory.HEALTH,
+      priority: 'Medium',
+      description: 'Gym and Diet plan',
+      progress: 65,
+      status: 'In Progress',
+      activities: [
+        { name: 'Morning Cardio', isCompleted: true, frequency: 'Daily' },
+        { name: 'No Sugar', isCompleted: false, frequency: 'Daily' }
+      ]
+    },
+    {
+      title: 'Save CAD $15,000',
+      category: GoalCategory.RELOCATION,
+      priority: 'High',
+      description: 'Relocation fund',
+      progress: 40,
+      status: 'In Progress',
+      activities: [
+        { name: 'Transfer to FX Account', isCompleted: true, frequency: 'Monthly' }
+      ]
+    }
+  ];
+
+  const fetchGoals = async () => {
+    if (!user) return;
+
+    try {
+      const { data, error } = await supabase
+        .from('goals')
+        .select(`
+                *,
+                activities (*)
+            `)
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+
+      if (data && data.length > 0) {
+        // Transform data to match Goal interface if needed (Supabase returns arrays)
+        // Ensure activities are sorted or formatted correctly
+        setGoals(data as Goal[]);
+      } else {
+        // Auto-seed if empty
+        await seedInitialData();
+      }
+    } catch (err) {
+      console.error("Error fetching goals:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const seedInitialData = async () => {
+    if (!user) return;
+    console.log("Seeding initial data...");
+
+    const newGoals: Goal[] = [];
+
+    for (const tmpl of INITIAL_GOALS_TEMPLATE) {
+      // Insert Goal
+      const { data: goalData, error: goalError } = await supabase
+        .from('goals')
+        .insert([{
+          user_id: user.id,
+          title: tmpl.title,
+          category: tmpl.category,
+          priority: tmpl.priority,
+          description: tmpl.description,
+          progress: tmpl.progress,
+          status: tmpl.status
+        }])
+        .select()
+        .single();
+
+      if (goalError || !goalData) {
+        console.error("Error seeding goal:", goalError);
+        continue;
+      }
+
+      // Insert Activities
+      if (tmpl.activities.length > 0) {
+        const activitiesToInsert = tmpl.activities.map(a => ({
+          goal_id: goalData.id,
+          name: a.name,
+          is_completed: a.isCompleted,
+          frequency: a.frequency
+        }));
+
+        const { data: actData, error: actError } = await supabase
+          .from('activities')
+          .insert(activitiesToInsert)
+          .select();
+
+        if (actError) console.error("Error seeding activities:", actError);
+
+        // Construct local object
+        newGoals.push({
+          ...goalData,
+          activities: actData || []
+        });
+      } else {
+        newGoals.push({
+          ...goalData,
+          activities: []
+        });
+      }
+    }
+    setGoals(newGoals);
+  };
 
   useEffect(() => {
-      localStorage.setItem('ls_goals', JSON.stringify(goals));
-  }, [goals]);
+    fetchGoals();
+  }, [user]);
 
   const renderView = () => {
     switch (currentView) {
@@ -73,7 +180,7 @@ const MainApp: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
       <Sidebar currentView={currentView} setView={setCurrentView} />
-      
+
       <main className="pl-64 min-h-screen">
         <div className="max-w-7xl mx-auto p-8 pt-10">
           {renderView()}

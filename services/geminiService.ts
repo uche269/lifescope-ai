@@ -2,9 +2,9 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 // Helper to initialize AI with dynamic key
 const getAI = () => {
-    const storedKey = localStorage.getItem('ls_gemini_key');
-    const apiKey = storedKey || process.env.API_KEY || '';
-    return new GoogleGenAI({ apiKey });
+  const storedKey = localStorage.getItem('ls_gemini_key');
+  const apiKey = storedKey || import.meta.env.VITE_GEMINI_API_KEY || '';
+  return new GoogleGenAI({ apiKey });
 };
 
 // System instruction to maintain persona
@@ -45,7 +45,7 @@ export const getAIRecommendation = async (goalTitle: string, currentStatus: stri
 export const generateScenarioScript = async (scenario: string, level: 'Beginner' | 'Advanced') => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-pro-preview'; 
+    const model = 'gemini-3-pro-preview';
     const prompt = `
       Scenario: ${scenario}
       Level: ${level}
@@ -71,43 +71,43 @@ export const generateScenarioScript = async (scenario: string, level: 'Beginner'
   }
 };
 
-export const chatWithAI = async (history: {role: string, parts: {text: string}[]}[], message: string) => {
-    try {
-        const ai = getAI();
-        const model = 'gemini-3-flash-preview';
-        const chat = ai.chats.create({
-            model,
-            history: history,
-            config: {
-                systemInstruction: "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
-            }
-        });
+export const chatWithAI = async (history: { role: string, parts: { text: string }[] }[], message: string) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-3-flash-preview';
+    const chat = ai.chats.create({
+      model,
+      history: history,
+      config: {
+        systemInstruction: "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
+      }
+    });
 
-        const result = await chat.sendMessage({ message });
-        return result.text;
-    } catch (error) {
-        return "I'm having trouble connecting. Please check your API Key in Settings.";
-    }
+    const result = await chat.sendMessage({ message });
+    return result.text;
+  } catch (error) {
+    return "I'm having trouble connecting. Please check your API Key in Settings.";
+  }
 }
 
 export const analyzeVoice = async (audioBase64: string) => {
-    try {
-        const ai = getAI();
-        const model = 'gemini-2.5-flash-native-audio-preview-12-2025';
-        const response = await ai.models.generateContent({
-            model,
-            contents: {
-                parts: [
-                    { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
-                    { text: "Analyze this voice recording. Give feedback on 1) Confidence, 2) Clarity, 3) Tone. Do not use Markdown." }
-                ]
-            }
-        });
-        return response.text;
-    } catch (error) {
-        console.error("Voice Analysis Error", error);
-        return "Could not analyze audio. Please ensure you have a valid Gemini API Key set in Settings.";
-    }
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.5-flash-native-audio-preview-12-2025';
+    const response = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
+          { text: "Analyze this voice recording. Give feedback on 1) Confidence, 2) Clarity, 3) Tone. Do not use Markdown." }
+        ]
+      }
+    });
+    return response.text;
+  } catch (error) {
+    console.error("Voice Analysis Error", error);
+    return "Could not analyze audio. Please ensure you have a valid Gemini API Key set in Settings.";
+  }
 }
 
 export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance') => {
@@ -142,7 +142,7 @@ export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance')
       contents: prompt,
       config: {
         systemInstruction: "You are an expert analyst. Output plain text only. No markdown formatting.",
-        tools: [{ googleSearch: {} }] 
+        tools: [{ googleSearch: {} }]
       }
     });
 
@@ -187,7 +187,7 @@ export const analyzeUrl = async (url: string) => {
   try {
     const ai = getAI();
     const model = 'gemini-3-pro-preview';
-    
+
     const prompt = `
       Access and analyze the content of this website: ${url}
       
@@ -224,11 +224,11 @@ export const analyzeUrl = async (url: string) => {
 // --- Annual Report Service ---
 
 export const generateAnnualReport = async (userData: any) => {
-    try {
-        const ai = getAI();
-        const model = 'gemini-3-pro-preview'; // High reasoning model for strategy
+  try {
+    const ai = getAI();
+    const model = 'gemini-3-pro-preview'; // High reasoning model for strategy
 
-        const prompt = `
+    const prompt = `
             You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
             
             USER DATA:
@@ -252,20 +252,20 @@ export const generateAnnualReport = async (userData: any) => {
             Write in clear, professional paragraphs.
         `;
 
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                // High thinking budget for deep analysis
-                thinkingConfig: { thinkingBudget: 1024 } 
-            }
-        });
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        // High thinking budget for deep analysis
+        thinkingConfig: { thinkingBudget: 1024 }
+      }
+    });
 
-        return response.text;
-    } catch (error) {
-        console.error("Annual Report Error:", error);
-        return "Unable to generate report. Please try again later.";
-    }
+    return response.text;
+  } catch (error) {
+    console.error("Annual Report Error:", error);
+    return "Unable to generate report. Please try again later.";
+  }
 }
 
 // --- Health & Nutrition Services ---
@@ -275,7 +275,7 @@ export const analyzeFoodImage = async (base64Image: string) => {
     const ai = getAI();
     // Use gemini-3-flash-preview for vision/multimodal capabilities
     const model = 'gemini-3-flash-preview';
-    
+
     const prompt = `
       Analyze the food in this image.
       Estimate the calories, protein (g), carbs (g), and fat (g).
@@ -305,7 +305,7 @@ export const analyzeFoodImage = async (base64Image: string) => {
 
     const text = response.text;
     if (!text) throw new Error("No response");
-    
+
     // Clean potential markdown just in case (though responseMimeType should handle it)
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
@@ -347,11 +347,11 @@ export const generateMealPlan = async (preferences: any) => {
 };
 
 export const improveDietPlan = async (currentPlan: string, goal: string) => {
-    try {
-        const ai = getAI();
-        const model = 'gemini-3-pro-preview';
-        
-        const prompt = `
+  try {
+    const ai = getAI();
+    const model = 'gemini-3-pro-preview';
+
+    const prompt = `
             I have this meal plan: 
             """
             ${currentPlan}
@@ -369,17 +369,17 @@ export const improveDietPlan = async (currentPlan: string, goal: string) => {
             }
         `;
 
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: { responseMimeType: "application/json" }
-        });
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
 
-        const text = response.text;
-        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-        return JSON.parse(jsonStr);
-    } catch (error) {
-        console.error("Diet Improvement Error", error);
-        return null;
-    }
+    const text = response.text;
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Diet Improvement Error", error);
+    return null;
+  }
 }
