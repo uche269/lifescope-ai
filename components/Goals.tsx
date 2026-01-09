@@ -218,10 +218,30 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     }).eq('id', goalId);
 
     // Update Local State
-    setGoals(goals.map(g => {
-      if (g.id !== goalId) return g;
-      return { ...g, activities: updatedActivities, progress, status: newGoalStatus };
-    }));
+    // Update Local State with FUNCTIONAL UPDATE to prevent race conditions
+    setGoals(prevGoals => {
+      return prevGoals.map(g => {
+        if (g.id !== goalId) return g;
+
+        // We need to re-find the goal and activity from prevGoals to be safe, 
+        // but since we are mapping, we are already iterating them.
+        // Just recreate the activity logic here.
+
+        const newActivities = g.activities.map(a =>
+          a.id === activityId ? { ...a, isCompleted: newStatus, last_completed_at: newTimestamp || undefined } : a
+        );
+
+        // Recalc progress in this closure
+        const completedCount = newActivities.filter(a => checkIsCompleted(a)).length;
+        const progress = newActivities.length ? Math.round((completedCount / newActivities.length) * 100) : 0;
+
+        let newGoalStatus: 'Not Started' | 'In Progress' | 'Completed' = 'In Progress';
+        if (progress === 100) newGoalStatus = 'Completed';
+        else if (progress === 0) newGoalStatus = 'Not Started';
+
+        return { ...g, activities: newActivities, progress, status: newGoalStatus };
+      });
+    });
   };
 
   const saveNewActivity = async (goalId: string) => {
@@ -243,7 +263,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     if (error || !data) return;
 
     // Update Local
-    setGoals(goals.map(g => {
+    // Update Local
+    setGoals(prevGoals => prevGoals.map(g => {
       if (g.id !== goalId) return g;
       // Recalculate progress with new activity (adds 1 uncompleted)
       const newActivities = [...g.activities, {
@@ -253,7 +274,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         frequency: data.frequency,
         deadline: data.deadline
       }];
-      const completed = newActivities.filter(a => a.isCompleted).length;
+      const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
       const progress = Math.round((completed / newActivities.length) * 100);
 
       return {
@@ -290,11 +311,11 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     const { error } = await supabase.from('activities').delete().eq('id', activityId);
     if (error) return;
 
-    setGoals(goals.map(g => {
+    setGoals(prevGoals => prevGoals.map(g => {
       if (g.id !== goalId) return g;
       const newActivities = g.activities.filter(a => a.id !== activityId);
       // Recalc progress
-      const completed = newActivities.filter(a => a.isCompleted).length;
+      const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
       const progress = newActivities.length ? Math.round((completed / newActivities.length) * 100) : 0;
 
       return {
