@@ -51,11 +51,15 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       .update({
         name: tempActivityName,
         frequency: tempActivityFreq,
-        deadline: tempActivityFreq === 'Once' ? (tempActivityDeadline || null) : null
+        deadline: tempActivityDeadline || null
       })
       .eq('id', activityId);
 
-    if (error) return;
+    if (error) {
+      console.error('Error updating activity:', error);
+      alert('Failed to update activity: ' + error.message);
+      return;
+    }
 
     setGoals(goals.map(g => {
       if (g.id !== goalId) return g;
@@ -65,7 +69,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           ...a,
           name: tempActivityName,
           frequency: tempActivityFreq,
-          deadline: tempActivityFreq === 'Once' ? tempActivityDeadline : undefined
+          deadline: tempActivityDeadline || undefined
         } : a)
       }
     }));
@@ -223,7 +227,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         name: newActivityName,
         frequency: newActivityFreq,
         is_completed: false,
-        deadline: newActivityFreq === 'Once' ? (newActivityDeadline || null) : null
+        deadline: newActivityDeadline || null
       }])
       .select()
       .single();
@@ -453,14 +457,12 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       <option>Once</option>
                     </select>
 
-                    {newActivityFreq === 'Once' && (
-                      <input
-                        type="date"
-                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
-                        value={newActivityDeadline}
-                        onChange={(e) => setNewActivityDeadline(e.target.value)}
-                      />
-                    )}
+                    <input
+                      type="date"
+                      className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                      value={newActivityDeadline}
+                      onChange={(e) => setNewActivityDeadline(e.target.value)}
+                    />
 
                     <div className="flex gap-2 ml-auto">
                       <button onClick={() => setAddingActivityTo(null)} className="text-slate-500 hover:text-white text-xs px-2">Cancel</button>
@@ -505,14 +507,12 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                             <option>Monthly</option>
                             <option>Once</option>
                           </select>
-                          {tempActivityFreq === 'Once' && (
-                            <input
-                              type="date"
-                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
-                              value={tempActivityDeadline}
-                              onChange={(e) => setTempActivityDeadline(e.target.value)}
-                            />
-                          )}
+                          <input
+                            type="date"
+                            className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                            value={tempActivityDeadline}
+                            onChange={(e) => setTempActivityDeadline(e.target.value)}
+                          />
                           <div className="flex gap-1">
                             <button onClick={() => saveActivityChanges(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
                             <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
@@ -523,7 +523,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                           <div className="flex items-center justify-between">
                             <span className={`text-sm truncate ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
                             <div className="flex items-center gap-2">
-                              {activity.frequency === 'Once' && activity.deadline && (
+                              {activity.deadline && (
                                 <span className="text-[10px] text-amber-500 flex items-center gap-1">
                                   <Calendar className="w-2.5 h-2.5" />
                                   {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
