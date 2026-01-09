@@ -1,8 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 
 // These should be set in your environment variables (e.g. .env file)
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseKey = import.meta.env.VITE_SUPABASE_KEY;
+// We check multiple sources to be robust against localized vs Vercel env var naming
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || import.meta.env.SUPABASE_URL;
+const supabaseKey = import.meta.env.VITE_SUPABASE_KEY || process.env.SUPABASE_KEY || import.meta.env.SUPABASE_KEY;
 
 let client;
 
