@@ -11,6 +11,7 @@ import Health from './components/Health';
 import { Goal, GoalCategory } from './types';
 
 import Login from './components/Login';
+import Diagnostics from './components/Diagnostics';
 import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
 
@@ -179,6 +180,9 @@ const MainApp: React.FC = () => {
         <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-indigo-900/10 rounded-full blur-[100px]"></div>
         <div className="absolute bottom-[-10%] right-[10%] w-[600px] h-[600px] bg-blue-900/10 rounded-full blur-[120px]"></div>
       </div>
+
+      {/* Debug Panel */}
+      <Diagnostics goals={goals} />
     </div>
   );
 };

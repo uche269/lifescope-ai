@@ -5,6 +5,7 @@ import { getAIRecommendation } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 import { checkIsCompleted } from '../utils/activityUtils';
+import { logError } from '../utils/debugLogger';
 
 interface GoalsProps {
   goals: Goal[];
@@ -189,10 +190,11 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       .select(); // Add select to verify return
 
     if (error) {
-      console.error("Error toggling activity:", error);
-      alert("Failed to save activity status. Please try again.");
+      logError("Toggle Activity Failed", { error, activityId });
+      alert("Failed to save activity status: " + error.message);
       return;
     }
+    logError("Toggle Activity DB Success", { data: "Updated successfully", newStatus, newTimestamp });
 
     // Update Local State
     const updatedActivities = goal.activities.map(a =>
