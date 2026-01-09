@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Goals from './components/Goals';
@@ -15,7 +16,6 @@ import { useAuth } from './contexts/AuthContext';
 
 const MainApp: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
-  const [currentView, setCurrentView] = useState('dashboard');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -137,27 +137,6 @@ const MainApp: React.FC = () => {
     fetchGoals();
   }, [user]);
 
-  const renderView = () => {
-    switch (currentView) {
-      case 'dashboard':
-        return <Dashboard goals={goals} />;
-      case 'goals':
-        return <Goals goals={goals} setGoals={setGoals} />;
-      case 'health':
-        return <Health />;
-      case 'selfdev':
-        return <SelfDevelopment />;
-      case 'knowledge':
-        return <Knowledge />;
-      case 'docs':
-        return <Documents />;
-      case 'settings':
-        return <Settings />;
-      default:
-        return <Dashboard goals={goals} />;
-    }
-  };
-
   if (authLoading) {
     return (
       <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white">
@@ -167,18 +146,26 @@ const MainApp: React.FC = () => {
   }
 
   if (!user) {
-    return (
-      <Login />
-    );
+    return <Login />;
   }
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
-      <Sidebar currentView={currentView} setView={setCurrentView} />
+      <Sidebar />
 
       <main className="pl-64 min-h-screen">
         <div className="max-w-7xl mx-auto p-8 pt-10">
-          {renderView()}
+          <Routes>
+            <Route path="/" element={<Dashboard goals={goals} />} />
+            <Route path="/dashboard" element={<Navigate to="/" replace />} />
+            <Route path="/goals" element={<Goals goals={goals} setGoals={setGoals} />} />
+            <Route path="/health" element={<Health />} />
+            <Route path="/selfdev" element={<SelfDevelopment />} />
+            <Route path="/knowledge" element={<Knowledge />} />
+            <Route path="/docs" element={<Documents />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
 
           <footer className="mt-12 border-t border-slate-900 pt-6 text-center text-slate-600 text-sm">
             <p className="mb-2">What do you want to add, review, or improve today?</p>

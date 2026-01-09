@@ -14,6 +14,7 @@ export interface Activity {
   name: string;
   isCompleted: boolean;
   frequency: 'Daily' | 'Weekly' | 'Monthly' | 'Once';
+  last_completed_at?: string; // ISO Date string
 }
 
 export interface Goal {

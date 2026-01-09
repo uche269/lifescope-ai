@@ -109,30 +109,91 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     setLoadingAI(null);
   };
 
+
+  const checkIsCompleted = (activity: Activity): boolean => {
+    // If we have no timestamp, rely on isCompleted (legacy) or false
+    if (!activity.last_completed_at) return activity.isCompleted;
+
+    const last = new Date(activity.last_completed_at);
+    const now = new Date();
+
+    // Normalize to local date strings to compare
+    const isSameDay = (d1: Date, d2: Date) =>
+      d1.getDate() === d2.getDate() &&
+      d1.getMonth() === d2.getMonth() &&
+      d1.getFullYear() === d2.getFullYear();
+
+    if (activity.frequency === 'Daily') {
+      return isSameDay(last, now);
+    }
+
+    if (activity.frequency === 'Weekly') {
+      // Check if within same ISO week
+      const getWeek = (d: Date) => {
+        const d2 = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d2.setUTCDate(d2.getUTCDate() + 4 - (d2.getUTCDay() || 7));
+        const yearStart = new Date(Date.UTC(d2.getUTCFullYear(), 0, 1));
+        return Math.ceil((((d2.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+      }
+      return getWeek(last) === getWeek(now) && last.getFullYear() === now.getFullYear();
+    }
+
+    if (activity.frequency === 'Monthly') {
+      return last.getMonth() === now.getMonth() && last.getFullYear() === now.getFullYear();
+    }
+
+    // Default 'Once' or others
+    return activity.isCompleted;
+  };
+
   const toggleActivity = async (goalId: string, activityId: string) => {
     if (editingActivityId === activityId) return;
 
-    // Find current activity state
     const goal = goals.find(g => g.id === goalId);
     const activity = goal?.activities.find(a => a.id === activityId);
     if (!goal || !activity) return;
 
-    const newStatus = !activity.isCompleted;
+    // Toggle: if currently completed (calculated), we effectively "uncomplete" it (clear timestamp?)
+    // But better behavior: if done today, toggle off. If done yesterday (expired), toggle on for today.
+    // Simplifying: if visually checkmarked, clicking unchecks. If unchecked, clicking checks (updates timestamp).
+    const isCurrentlyDone = checkIsCompleted(activity);
+    const newStatus = !isCurrentlyDone;
+
+    // If checking ON, update timestamp to NOW.
+    // If checking OFF, set timestamp to null (or maybe keep history? For now let's just clear for simple state).
+    const newTimestamp = newStatus ? new Date().toISOString() : null;
 
     // Update Activity in DB
     const { error } = await supabase
       .from('activities')
-      .update({ is_completed: newStatus })
+      .update({
+        is_completed: newStatus,
+        last_completed_at: newTimestamp
+      })
       .eq('id', activityId);
 
     if (error) return;
 
-    // Calculate new progress
+    // Update Local State
     const updatedActivities = goal.activities.map(a =>
-      a.id === activityId ? { ...a, isCompleted: newStatus } : a
+      a.id === activityId ? { ...a, isCompleted: newStatus, last_completed_at: newTimestamp || undefined } : a
     );
-    const completed = updatedActivities.filter(a => a.isCompleted).length;
-    const progress = updatedActivities.length ? Math.round((completed / updatedActivities.length) * 100) : 0;
+
+    // Recalc Goal Progress
+    // We must count how many 'active' activities are done based on the SAME logic
+    const completedCount = updatedActivities.filter(a => {
+      // We can reuse the logic, but we need to pass the updated 'a'
+      // But 'a' here is the raw object.
+      // Let's rely on the explicit 'newStatus' for the current one, and re-eval others??
+      // Actually, for simplicity, let's just use the boolean we just set for the current one, 
+      // AND re-evaluate others just in case they expired while we sat here? 
+      // No, keep it simple. Trust the loaded state for others unless we want real-time expiration?
+      // Let's just trust isCompleted for others for now, but really we should use the check function.
+      if (a.id === activityId) return newStatus;
+      return checkIsCompleted(a);
+    }).length;
+
+    const progress = updatedActivities.length ? Math.round((completedCount / updatedActivities.length) * 100) : 0;
 
     // Update Goal Progress in DB
     await supabase.from('goals').update({ progress }).eq('id', goalId);
@@ -343,10 +404,14 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
               </div>
             </div>
 
-            {/* Activities */}
             <div className="space-y-3 mb-6">
               <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <h4 className="text-sm font-semibold text-slate-300">Activities</h4>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-semibold text-slate-300">Activities</h4>
+                  <span className="text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded-full">
+                    {goal.activities.filter(a => checkIsCompleted(a)).length}/{goal.activities.length}
+                  </span>
+                </div>
                 <button
                   onClick={() => setAddingActivityTo(goal.id)}
                   className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-1 rounded transition-colors"
@@ -388,41 +453,45 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
               )}
 
               <div className="max-h-[150px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                {goal.activities.map(activity => (
-                  <div key={activity.id} className="flex items-center gap-3 group bg-slate-900/30 p-2 rounded-lg hover:bg-slate-900/60 transition-colors">
-                    <div
-                      onClick={() => toggleActivity(goal.id, activity.id)}
-                      className={`cursor-pointer w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${activity.isCompleted ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 hover:border-indigo-500'}`}
-                    >
-                      {activity.isCompleted && <Check className="w-3 h-3 text-white" />}
-                    </div>
-
-                    {editingActivityId === activity.id ? (
-                      <div className="flex items-center flex-1 gap-2">
-                        <input
-                          autoFocus
-                          value={tempActivityName}
-                          onChange={(e) => setTempActivityName(e.target.value)}
-                          className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
-                        />
-                        <button onClick={() => saveActivityName(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
-                        <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
+                {goal.activities.map(activity => {
+                  const isDone = checkIsCompleted(activity);
+                  return (
+                    <div key={activity.id} className="flex items-center gap-3 group bg-slate-900/30 p-2 rounded-lg hover:bg-slate-900/60 transition-colors">
+                      <div
+                        onClick={() => toggleActivity(goal.id, activity.id)}
+                        className={`cursor-pointer w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${isDone ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 hover:border-indigo-500'
+                          }`}
+                      >
+                        {isDone && <Check className="w-3 h-3 text-white" />}
                       </div>
-                    ) : (
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between">
-                          <span className={`text-sm truncate ${activity.isCompleted ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
-                          <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+
+                      {editingActivityId === activity.id ? (
+                        <div className="flex items-center flex-1 gap-2">
+                          <input
+                            autoFocus
+                            value={tempActivityName}
+                            onChange={(e) => setTempActivityName(e.target.value)}
+                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                          />
+                          <button onClick={() => saveActivityName(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
+                          <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
                         </div>
-                      </div>
-                    )}
+                      ) : (
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center justify-between">
+                            <span className={`text-sm truncate ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
+                            <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+                          </div>
+                        </div>
+                      )}
 
-                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => startEditActivity(activity)} className="p-1 text-slate-500 hover:text-indigo-400"><Edit2 className="w-3 h-3" /></button>
-                      <button onClick={() => deleteActivity(goal.id, activity.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEditActivity(activity)} className="p-1 text-slate-500 hover:text-indigo-400"><Edit2 className="w-3 h-3" /></button>
+                        <button onClick={() => deleteActivity(goal.id, activity.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
