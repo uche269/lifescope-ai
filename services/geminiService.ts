@@ -255,7 +255,7 @@ export const generateAnnualReport = async (userData: any) => {
         `;
 
     const response = await ai.models.generateContent({
-      model,
+      model: MODEL_NAME,
       contents: prompt,
       config: {
         // High thinking budget for deep analysis

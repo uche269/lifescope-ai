@@ -8,7 +8,7 @@ import Knowledge from './components/Knowledge';
 import Documents from './components/Documents';
 import Settings from './components/Settings';
 import Health from './components/Health';
-import { Goal, GoalCategory } from './types';
+import { Goal, GoalCategory, Activity } from './types';
 
 import Login from './components/Login';
 import Diagnostics from './components/Diagnostics';
@@ -121,18 +121,23 @@ const MainApp: React.FC = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        const loadedGoals = (data as Goal[]).map(g => {
-          const activities = g.activities || [];
-          const completedCount = activities.filter(a => checkIsCompleted(a)).length;
+        const loadedGoals = data.map((g: any) => {
+          const activities = (g.activities || []).map((a: any) => ({
+            ...a,
+            isCompleted: a.is_completed
+          }));
+
+          const completedCount = activities.filter((a: Activity) => checkIsCompleted(a)).length;
           const computedProgress = activities.length > 0
             ? Math.round((completedCount / activities.length) * 100)
             : 0;
 
           return {
             ...g,
+            activities,
             progress: computedProgress, // Override DB value with fresh calculation
             status: computedProgress === 100 ? 'Completed' : (computedProgress === 0 ? 'Not Started' : 'In Progress')
-          };
+          } as Goal;
         });
         setGoals(loadedGoals);
       } else {
