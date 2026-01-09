@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Goal, GoalCategory, Activity } from '../types';
-import { Plus, Trash2, Sparkles, Edit2, Check, X, Calendar } from 'lucide-react';
+import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff } from 'lucide-react';
 import { getAIRecommendation } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
   // Activity Editing State
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
+  const [showCompletedMap, setShowCompletedMap] = useState<Record<string, boolean>>({});
+
+  // Temporary state for editing activity
   const [tempActivityName, setTempActivityName] = useState('');
   const [tempActivityFreq, setTempActivityFreq] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Once'>('Weekly');
   const [tempActivityDeadline, setTempActivityDeadline] = useState<string>('');
@@ -182,9 +185,14 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         is_completed: newStatus,
         last_completed_at: newTimestamp
       })
-      .eq('id', activityId);
+      .eq('id', activityId)
+      .select(); // Add select to verify return
 
-    if (error) return;
+    if (error) {
+      console.error("Error toggling activity:", error);
+      alert("Failed to save activity status. Please try again.");
+      return;
+    }
 
     // Update Local State
     const updatedActivities = goal.activities.map(a =>
@@ -427,12 +435,28 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                     {goal.activities.filter(a => checkIsCompleted(a)).length}/{goal.activities.length}
                   </span>
                 </div>
-                <button
-                  onClick={() => setAddingActivityTo(goal.id)}
-                  className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-1 rounded transition-colors"
-                >
-                  <Plus className="w-3 h-3" /> Add New
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setShowCompletedMap(prev => ({ ...prev, [goal.id]: !prev[goal.id] }))}
+                    className="text-xs text-slate-500 hover:text-indigo-400 flex items-center gap-1 transition-colors mr-2"
+                  >
+                    {showCompletedMap[goal.id] ? (
+                      <>
+                        <EyeOff className="w-3 h-3" /> Hide Done
+                      </>
+                    ) : (
+                      <>
+                        <Eye className="w-3 h-3" /> Show Done
+                      </>
+                    )}
+                  </button>
+                  <button
+                    onClick={() => setAddingActivityTo(goal.id)}
+                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-1 rounded transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> Add New
+                  </button>
+                </div>
               </div>
 
               {/* Inline Add Activity Form */}
@@ -477,71 +501,73 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
               )}
 
               <div className="max-h-[150px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                {goal.activities.map(activity => {
-                  const isDone = checkIsCompleted(activity);
-                  return (
-                    <div key={activity.id} className="flex items-center gap-3 group bg-slate-900/30 p-2 rounded-lg hover:bg-slate-900/60 transition-colors">
-                      <div
-                        onClick={() => toggleActivity(goal.id, activity.id)}
-                        className={`cursor-pointer w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${isDone ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 hover:border-indigo-500'
-                          }`}
-                      >
-                        {isDone && <Check className="w-3 h-3 text-white" />}
-                      </div>
-
-                      {editingActivityId === activity.id ? (
-                        <div className="flex items-center flex-1 gap-2 flex-wrap">
-                          <input
-                            autoFocus
-                            value={tempActivityName}
-                            onChange={(e) => setTempActivityName(e.target.value)}
-                            className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
-                          />
-                          <select
-                            value={tempActivityFreq}
-                            onChange={(e) => setTempActivityFreq(e.target.value as any)}
-                            className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
-                          >
-                            <option>Daily</option>
-                            <option>Weekly</option>
-                            <option>Monthly</option>
-                            <option>Once</option>
-                          </select>
-                          <input
-                            type="date"
-                            className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
-                            value={tempActivityDeadline}
-                            onChange={(e) => setTempActivityDeadline(e.target.value)}
-                          />
-                          <div className="flex gap-1">
-                            <button onClick={() => saveActivityChanges(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
-                            <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
-                          </div>
+                {goal.activities
+                  .filter(a => showCompletedMap[goal.id] || !checkIsCompleted(a)) // FILTER LOGIC
+                  .map(activity => {
+                    const isDone = checkIsCompleted(activity);
+                    return (
+                      <div key={activity.id} className="flex items-center gap-3 group bg-slate-900/30 p-2 rounded-lg hover:bg-slate-900/60 transition-colors">
+                        <div
+                          onClick={() => toggleActivity(goal.id, activity.id)}
+                          className={`cursor-pointer w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${isDone ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 hover:border-indigo-500'
+                            }`}
+                        >
+                          {isDone && <Check className="w-3 h-3 text-white" />}
                         </div>
-                      ) : (
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center justify-between">
-                            <span className={`text-sm truncate ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
-                            <div className="flex items-center gap-2">
-                              {activity.deadline && (
-                                <span className="text-[10px] text-amber-500 flex items-center gap-1">
-                                  <Calendar className="w-2.5 h-2.5" />
-                                  {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                </span>
-                              )}
-                              <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+
+                        {editingActivityId === activity.id ? (
+                          <div className="flex items-center flex-1 gap-2 flex-wrap">
+                            <input
+                              autoFocus
+                              value={tempActivityName}
+                              onChange={(e) => setTempActivityName(e.target.value)}
+                              className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                            />
+                            <select
+                              value={tempActivityFreq}
+                              onChange={(e) => setTempActivityFreq(e.target.value as any)}
+                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                            >
+                              <option>Daily</option>
+                              <option>Weekly</option>
+                              <option>Monthly</option>
+                              <option>Once</option>
+                            </select>
+                            <input
+                              type="date"
+                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                              value={tempActivityDeadline}
+                              onChange={(e) => setTempActivityDeadline(e.target.value)}
+                            />
+                            <div className="flex gap-1">
+                              <button onClick={() => saveActivityChanges(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
+                              <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
                             </div>
                           </div>
-                        </div>
-                      )}
+                        ) : (
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between">
+                              <span className={`text-sm truncate ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
+                              <div className="flex items-center gap-2">
+                                {activity.deadline && (
+                                  <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                                    <Calendar className="w-2.5 h-2.5" />
+                                    {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+                              </div>
+                            </div>
+                          </div>
+                        )}
 
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => startEditActivity(activity)} className="p-1 text-slate-500 hover:text-indigo-400"><Edit2 className="w-3 h-3" /></button>
-                        <button onClick={() => deleteActivity(goal.id, activity.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={() => startEditActivity(activity)} className="p-1 text-slate-500 hover:text-indigo-400"><Edit2 className="w-3 h-3" /></button>
+                          <button onClick={() => deleteActivity(goal.id, activity.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
               </div>
             </div>
 
