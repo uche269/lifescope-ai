@@ -155,7 +155,9 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
       {/* Header Section */}
       <div className="flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome back, {user?.email?.split('@')[0]}</h1>
+          <h1 className="text-3xl font-bold text-white mb-2">
+            Welcome back, {user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'Boss'}
+          </h1>
           <p className="text-slate-400">Here's your LifeScope overview for today.</p>
         </div>
         <div className="bg-gradient-to-r from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 rounded-xl flex items-center gap-4 backdrop-blur-sm">
