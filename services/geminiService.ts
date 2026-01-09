@@ -227,7 +227,8 @@ export const analyzeUrl = async (url: string) => {
 export const generateAnnualReport = async (userData: any) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-flash'; // High reasoning model for strategy
+    const MODEL_NAME = 'gemini-1.5-flash-latest'; // Fallback to a known alias
+    const API_VERSION = 'v1beta'; // High reasoning model for strategy
 
     const prompt = `
             You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
