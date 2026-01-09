@@ -4,7 +4,7 @@ import { Goal, GoalCategory } from '../types';
 import { TrendingUp, CheckCircle2, AlertCircle, Sparkles, FileText, X, Download, LayoutTemplate, Target } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
-import { generateAnnualReportClaude } from '../services/claudeService';
+import { generateAnnualReport } from '../services/geminiService';
 import { checkIsCompleted } from '../utils/activityUtils';
 
 interface DashboardProps {
@@ -112,7 +112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
       }
     };
 
-    const report = await generateAnnualReportClaude(userData);
+    const report = await generateAnnualReport(userData);
     setReportContent(report);
     setGeneratingReport(false);
   };
