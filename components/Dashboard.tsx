@@ -315,6 +315,98 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
         </div>
       )}
 
+      {/* Activity Tracker Section */}
+      <div className="glass-panel p-6 rounded-2xl">
+        <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <Target className="w-5 h-5 text-indigo-400" /> Activity Tracker
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Daily Tasks Due */}
+          <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+            <h4 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-indigo-500"></span>
+              Due Today (Daily)
+            </h4>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+              {goals.flatMap(g => g.activities.filter(a => a.frequency === 'Daily' && !checkIsCompleted(a)).map(a => ({ ...a, goalTitle: g.title }))).length > 0 ? (
+                goals.flatMap(g => g.activities.filter(a => a.frequency === 'Daily' && !checkIsCompleted(a)).map(a => ({ ...a, goalTitle: g.title }))).map((a, i) => (
+                  <div key={i} className="flex justify-between items-center text-xs p-2 bg-slate-900 rounded hover:bg-slate-800 transition-colors">
+                    <div>
+                      <span className="text-slate-200 block">{a.name}</span>
+                      <span className="text-slate-500 text-[10px]">{a.goalTitle}</span>
+                    </div>
+                    <span className="px-1.5 py-0.5 bg-indigo-500/10 text-indigo-400 rounded text-[10px]">Daily</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 italic">All daily tasks completed!</p>
+              )}
+            </div>
+          </div>
+
+          {/* Overdue Activities */}
+          <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+            <h4 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <AlertCircle className="w-3 h-3 text-red-400" />
+              Overdue Activities
+            </h4>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+              {goals.flatMap(g => g.activities.filter(a => a.frequency === 'Once' && a.deadline && new Date(a.deadline).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0) && !a.isCompleted).map(a => ({ ...a, goalTitle: g.title }))).length > 0 ? (
+                goals.flatMap(g => g.activities.filter(a => a.frequency === 'Once' && a.deadline && new Date(a.deadline).setHours(0, 0, 0, 0) < new Date().setHours(0, 0, 0, 0) && !a.isCompleted).map(a => ({ ...a, goalTitle: g.title }))).map((a, i) => (
+                  <div key={i} className="flex justify-between items-center text-xs p-2 bg-slate-900 rounded border border-red-500/10 hover:bg-slate-800 transition-colors">
+                    <div>
+                      <span className="text-slate-200 block">{a.name}</span>
+                      <span className="text-red-400 text-[10px]">Due {new Date(a.deadline!).toLocaleDateString()}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 italic">No overdue activities.</p>
+              )}
+            </div>
+          </div>
+
+          {/* Upcoming Deadlines */}
+          <div className="bg-slate-900/50 p-4 rounded-xl border border-slate-800">
+            <h4 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+              Next 7 Days
+            </h4>
+            <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+              {goals.flatMap(g => g.activities.filter(a => {
+                if (a.frequency !== 'Once' || !a.deadline || a.isCompleted) return false;
+                const d = new Date(a.deadline);
+                const deadlineDate = new Date(d.setHours(0, 0, 0, 0));
+                const todayDate = new Date(new Date().setHours(0, 0, 0, 0));
+                const nextWeekDate = new Date(new Date().setDate(new Date().getDate() + 7));
+                nextWeekDate.setHours(0, 0, 0, 0);
+                return deadlineDate >= todayDate && deadlineDate <= nextWeekDate;
+              }).map(a => ({ ...a, goalTitle: g.title }))).length > 0 ? (
+                goals.flatMap(g => g.activities.filter(a => {
+                  if (a.frequency !== 'Once' || !a.deadline || a.isCompleted) return false;
+                  const d = new Date(a.deadline);
+                  const deadlineDate = new Date(d.setHours(0, 0, 0, 0));
+                  const todayDate = new Date(new Date().setHours(0, 0, 0, 0));
+                  const nextWeekDate = new Date(new Date().setDate(new Date().getDate() + 7));
+                  nextWeekDate.setHours(0, 0, 0, 0);
+                  return deadlineDate >= todayDate && deadlineDate <= nextWeekDate;
+                }).map(a => ({ ...a, goalTitle: g.title }))).map((a, i) => (
+                  <div key={i} className="flex justify-between items-center text-xs p-2 bg-slate-900 rounded border-l-2 border-l-amber-500 hover:bg-slate-800 transition-colors">
+                    <div>
+                      <span className="text-slate-200 block">{a.name}</span>
+                      <span className="text-amber-400 text-[10px]">{new Date(a.deadline!).toLocaleDateString()}</span>
+                    </div>
+                    <span className="text-slate-500 text-[10px] truncate max-w-[80px]">{a.goalTitle}</span>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-slate-500 italic">No upcoming deadlines.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Main Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 glass-panel p-6 rounded-2xl">
