@@ -14,6 +14,7 @@ import Login from './components/Login';
 import Diagnostics from './components/Diagnostics';
 import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
+import { checkIsCompleted } from './utils/activityUtils';
 
 const MainApp: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
@@ -120,9 +121,20 @@ const MainApp: React.FC = () => {
       if (error) throw error;
 
       if (data && data.length > 0) {
-        // Transform data to match Goal interface if needed (Supabase returns arrays)
-        // Ensure activities are sorted or formatted correctly
-        setGoals(data as Goal[]);
+        const loadedGoals = (data as Goal[]).map(g => {
+          const activities = g.activities || [];
+          const completedCount = activities.filter(a => checkIsCompleted(a)).length;
+          const computedProgress = activities.length > 0
+            ? Math.round((completedCount / activities.length) * 100)
+            : 0;
+
+          return {
+            ...g,
+            progress: computedProgress, // Override DB value with fresh calculation
+            status: computedProgress === 100 ? 'Completed' : (computedProgress === 0 ? 'Not Started' : 'In Progress')
+          };
+        });
+        setGoals(loadedGoals);
       } else {
         // Auto-seed if empty
         await seedInitialData();
