@@ -112,7 +112,16 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
       }
     };
 
-    const report = await generateAnnualReport(userData);
+    const provider = localStorage.getItem('ls_active_provider') || 'gemini';
+    let report = "";
+
+    if (provider === 'claude') {
+      const { generateAnnualReportClaude } = await import('../services/claudeService');
+      report = await generateAnnualReportClaude(userData);
+    } else {
+      report = await generateAnnualReport(userData);
+    }
+
     setReportContent(report);
     setGeneratingReport(false);
   };

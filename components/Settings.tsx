@@ -7,6 +7,7 @@ const Settings: React.FC = () => {
         openai: '',
         claude: ''
     });
+    const [activeProvider, setActiveProvider] = useState('gemini');
     const [showKey, setShowKey] = useState<Record<string, boolean>>({});
     const [saved, setSaved] = useState(false);
 
@@ -14,6 +15,7 @@ const Settings: React.FC = () => {
         localStorage.setItem('ls_gemini_key', keys.gemini);
         localStorage.setItem('ls_openai_key', keys.openai);
         localStorage.setItem('ls_anthropic_key', keys.claude);
+        localStorage.setItem('ls_active_provider', activeProvider);
 
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
@@ -26,6 +28,7 @@ const Settings: React.FC = () => {
             openai: localStorage.getItem('ls_openai_key') || '',
             claude: localStorage.getItem('ls_anthropic_key') || ''
         });
+        setActiveProvider(localStorage.getItem('ls_active_provider') || 'gemini');
     }, []);
 
     const toggleVisibility = (provider: string) => {
@@ -51,6 +54,21 @@ const Settings: React.FC = () => {
                 </div>
 
                 <div className="space-y-6">
+                    {/* Active Provider Selector */}
+                    <div>
+                        <label className="block text-sm font-medium text-slate-300 mb-2">Active AI Provider</label>
+                        <select
+                            value={activeProvider}
+                            onChange={(e) => setActiveProvider(e.target.value)}
+                            className="w-full bg-slate-900 border border-slate-700 rounded-xl py-3 px-4 text-white focus:border-indigo-500 focus:outline-none"
+                        >
+                            <option value="gemini">Google Gemini (Recommended)</option>
+                            <option value="claude">Anthropic Claude</option>
+                            <option value="openai">OpenAI (GPT-4)</option>
+                        </select>
+                        <p className="text-xs text-slate-500 mt-1">Select which AI service to use for generating reports and advice.</p>
+                    </div>
+
                     {/* Gemini */}
                     <div>
                         <label className="block text-sm font-medium text-slate-300 mb-2 flex justify-between">

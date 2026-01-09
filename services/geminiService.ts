@@ -20,7 +20,7 @@ Always end responses by asking "What do you want to add, review, or improve toda
 export const getAIRecommendation = async (goalTitle: string, currentStatus: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-flash-preview';
+    const model = 'gemini-1.5-flash';
     const prompt = `
       I have a goal: "${goalTitle}". 
       Current status: ${currentStatus}.
@@ -46,7 +46,7 @@ export const getAIRecommendation = async (goalTitle: string, currentStatus: stri
 export const generateScenarioScript = async (scenario: string, level: 'Beginner' | 'Advanced') => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-1.5-pro';
     const prompt = `
       Scenario: ${scenario}
       Level: ${level}
@@ -75,7 +75,7 @@ export const generateScenarioScript = async (scenario: string, level: 'Beginner'
 export const chatWithAI = async (history: { role: string, parts: { text: string }[] }[], message: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-flash-preview';
+    const model = 'gemini-1.5-flash';
     const chat = ai.chats.create({
       model,
       history: history,
@@ -94,7 +94,7 @@ export const chatWithAI = async (history: { role: string, parts: { text: string 
 export const analyzeVoice = async (audioBase64: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.5-flash-native-audio-preview-12-2025';
+    const model = 'gemini-1.5-flash';
     const response = await ai.models.generateContent({
       model,
       contents: {
@@ -114,7 +114,7 @@ export const analyzeVoice = async (audioBase64: string) => {
 export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance') => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-pro-preview'; // Using Pro for deeper reasoning
+    const model = 'gemini-1.5-pro'; // Using Pro for deeper reasoning
     let prompt = "";
 
     if (topic === 'Sports') {
@@ -157,7 +157,7 @@ export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance')
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.5-flash-preview-09-2025';
+    const model = 'gemini-1.5-flash';
     const response = await ai.models.generateContent({
       model,
       contents: {
@@ -187,7 +187,7 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
 export const analyzeUrl = async (url: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-1.5-pro';
 
     const prompt = `
       Access and analyze the content of this website: ${url}
@@ -227,7 +227,7 @@ export const analyzeUrl = async (url: string) => {
 export const generateAnnualReport = async (userData: any) => {
   try {
     const ai = getAI();
-    const MODEL_NAME = 'gemini-1.5-flash-latest'; // Fallback to a known alias
+    const MODEL_NAME = 'gemini-1.5-flash'; // Fallback to a known alias
     const API_VERSION = 'v1beta'; // High reasoning model for strategy
 
     const prompt = `
@@ -280,7 +280,7 @@ export const analyzeFoodImage = async (base64Image: string) => {
   try {
     const ai = getAI();
     // Use gemini-3-flash-preview for vision/multimodal capabilities
-    const model = 'gemini-3-flash-preview';
+    const model = 'gemini-1.5-flash';
 
     const prompt = `
       Analyze the food in this image.
@@ -324,7 +324,7 @@ export const analyzeFoodImage = async (base64Image: string) => {
 export const generateMealPlan = async (preferences: any) => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-1.5-pro';
 
     const prompt = `
       Create a 1-day meal plan (Breakfast, Lunch, Dinner, Snack) based on these preferences:
@@ -355,7 +355,7 @@ export const generateMealPlan = async (preferences: any) => {
 export const improveDietPlan = async (currentPlan: string, goal: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-3-pro-preview';
+    const model = 'gemini-1.5-pro';
 
     const prompt = `
             I have this meal plan: 
