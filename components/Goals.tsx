@@ -4,6 +4,7 @@ import { Plus, Trash2, Sparkles, Edit2, Check, X, Calendar } from 'lucide-react'
 import { getAIRecommendation } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { checkIsCompleted } from '../utils/activityUtils';
 
 interface GoalsProps {
   goals: Goal[];
@@ -28,11 +29,48 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   // Activity Editing State
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [tempActivityName, setTempActivityName] = useState('');
+  const [tempActivityFreq, setTempActivityFreq] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Once'>('Weekly');
+  const [tempActivityDeadline, setTempActivityDeadline] = useState<string>('');
 
   // New Activity State (Inline Form)
   const [addingActivityTo, setAddingActivityTo] = useState<string | null>(null);
   const [newActivityName, setNewActivityName] = useState('');
   const [newActivityFreq, setNewActivityFreq] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Once'>('Weekly');
+  const [newActivityDeadline, setNewActivityDeadline] = useState<string>('');
+
+  const startEditActivity = (activity: Activity) => {
+    setEditingActivityId(activity.id);
+    setTempActivityName(activity.name);
+    setTempActivityFreq(activity.frequency);
+    setTempActivityDeadline(activity.deadline || '');
+  }
+
+  const saveActivityChanges = async (goalId: string, activityId: string) => {
+    const { error } = await supabase
+      .from('activities')
+      .update({
+        name: tempActivityName,
+        frequency: tempActivityFreq,
+        deadline: tempActivityFreq === 'Once' ? (tempActivityDeadline || null) : null
+      })
+      .eq('id', activityId);
+
+    if (error) return;
+
+    setGoals(goals.map(g => {
+      if (g.id !== goalId) return g;
+      return {
+        ...g,
+        activities: g.activities.map(a => a.id === activityId ? {
+          ...a,
+          name: tempActivityName,
+          frequency: tempActivityFreq,
+          deadline: tempActivityFreq === 'Once' ? tempActivityDeadline : undefined
+        } : a)
+      }
+    }));
+    setEditingActivityId(null);
+  }
 
   const openAddModal = () => {
     setGoalForm({ title: '', category: GoalCategory.PERSONAL, priority: 'Medium', deadline: '' });
@@ -120,42 +158,6 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   };
 
 
-  const checkIsCompleted = (activity: Activity): boolean => {
-    // If we have no timestamp, rely on isCompleted (legacy) or false
-    if (!activity.last_completed_at) return activity.isCompleted;
-
-    const last = new Date(activity.last_completed_at);
-    const now = new Date();
-
-    // Normalize to local date strings to compare
-    const isSameDay = (d1: Date, d2: Date) =>
-      d1.getDate() === d2.getDate() &&
-      d1.getMonth() === d2.getMonth() &&
-      d1.getFullYear() === d2.getFullYear();
-
-    if (activity.frequency === 'Daily') {
-      return isSameDay(last, now);
-    }
-
-    if (activity.frequency === 'Weekly') {
-      // Check if within same ISO week
-      const getWeek = (d: Date) => {
-        const d2 = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-        d2.setUTCDate(d2.getUTCDate() + 4 - (d2.getUTCDay() || 7));
-        const yearStart = new Date(Date.UTC(d2.getUTCFullYear(), 0, 1));
-        return Math.ceil((((d2.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
-      }
-      return getWeek(last) === getWeek(now) && last.getFullYear() === now.getFullYear();
-    }
-
-    if (activity.frequency === 'Monthly') {
-      return last.getMonth() === now.getMonth() && last.getFullYear() === now.getFullYear();
-    }
-
-    // Default 'Once' or others
-    return activity.isCompleted;
-  };
-
   const toggleActivity = async (goalId: string, activityId: string) => {
     if (editingActivityId === activityId) return;
 
@@ -163,14 +165,10 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     const activity = goal?.activities.find(a => a.id === activityId);
     if (!goal || !activity) return;
 
-    // Toggle: if currently completed (calculated), we effectively "uncomplete" it (clear timestamp?)
-    // But better behavior: if done today, toggle off. If done yesterday (expired), toggle on for today.
-    // Simplifying: if visually checkmarked, clicking unchecks. If unchecked, clicking checks (updates timestamp).
+    // Toggle logic
     const isCurrentlyDone = checkIsCompleted(activity);
     const newStatus = !isCurrentlyDone;
 
-    // If checking ON, update timestamp to NOW.
-    // If checking OFF, set timestamp to null (or maybe keep history? For now let's just clear for simple state).
     const newTimestamp = newStatus ? new Date().toISOString() : null;
 
     // Update Activity in DB
@@ -190,22 +188,13 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     );
 
     // Recalc Goal Progress
-    // We must count how many 'active' activities are done based on the SAME logic
     const completedCount = updatedActivities.filter(a => {
-      // We can reuse the logic, but we need to pass the updated 'a'
-      // But 'a' here is the raw object.
-      // Let's rely on the explicit 'newStatus' for the current one, and re-eval others??
-      // Actually, for simplicity, let's just use the boolean we just set for the current one, 
-      // AND re-evaluate others just in case they expired while we sat here? 
-      // No, keep it simple. Trust the loaded state for others unless we want real-time expiration?
-      // Let's just trust isCompleted for others for now, but really we should use the check function.
       if (a.id === activityId) return newStatus;
       return checkIsCompleted(a);
     }).length;
 
     const progress = updatedActivities.length ? Math.round((completedCount / updatedActivities.length) * 100) : 0;
 
-    // Recalculate Status based on Progress
     let newGoalStatus: 'Not Started' | 'In Progress' | 'Completed' = 'In Progress';
     if (progress === 100) newGoalStatus = 'Completed';
     else if (progress === 0) newGoalStatus = 'Not Started';
@@ -233,7 +222,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         goal_id: goalId,
         name: newActivityName,
         frequency: newActivityFreq,
-        is_completed: false
+        is_completed: false,
+        deadline: newActivityFreq === 'Once' ? (newActivityDeadline || null) : null
       }])
       .select()
       .single();
@@ -248,7 +238,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         id: data.id,
         name: data.name,
         isCompleted: data.is_completed,
-        frequency: data.frequency
+        frequency: data.frequency,
+        deadline: data.deadline
       }];
       const completed = newActivities.filter(a => a.isCompleted).length;
       const progress = Math.round((completed / newActivities.length) * 100);
@@ -265,7 +256,6 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     if (goal) {
       const newTotal = goal.activities.length + 1;
       const completedCount = goal.activities.filter(a => a.isCompleted).length;
-      // inherited completion status is false for new activity
       const newProgress = Math.round((completedCount / newTotal) * 100);
 
       let newStatus: 'Not Started' | 'In Progress' | 'Completed' = 'In Progress';
@@ -281,6 +271,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     setAddingActivityTo(null);
     setNewActivityName('');
     setNewActivityFreq('Weekly');
+    setNewActivityDeadline('');
   }
 
   const deleteActivity = async (goalId: string, activityId: string) => {
@@ -300,29 +291,6 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         activities: newActivities
       }
     }));
-  }
-
-  const startEditActivity = (activity: Activity) => {
-    setEditingActivityId(activity.id);
-    setTempActivityName(activity.name);
-  }
-
-  const saveActivityName = async (goalId: string, activityId: string) => {
-    const { error } = await supabase
-      .from('activities')
-      .update({ name: tempActivityName })
-      .eq('id', activityId);
-
-    if (error) return;
-
-    setGoals(goals.map(g => {
-      if (g.id !== goalId) return g;
-      return {
-        ...g,
-        activities: g.activities.map(a => a.id === activityId ? { ...a, name: tempActivityName } : a)
-      }
-    }));
-    setEditingActivityId(null);
   }
 
   return (
@@ -473,7 +441,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                     onChange={(e) => setNewActivityName(e.target.value)}
                     className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
                   />
-                  <div className="flex justify-between items-center">
+                  <div className="flex justify-between items-center gap-2">
                     <select
                       value={newActivityFreq}
                       onChange={(e) => setNewActivityFreq(e.target.value as any)}
@@ -484,7 +452,17 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       <option>Monthly</option>
                       <option>Once</option>
                     </select>
-                    <div className="flex gap-2">
+
+                    {newActivityFreq === 'Once' && (
+                      <input
+                        type="date"
+                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                        value={newActivityDeadline}
+                        onChange={(e) => setNewActivityDeadline(e.target.value)}
+                      />
+                    )}
+
+                    <div className="flex gap-2 ml-auto">
                       <button onClick={() => setAddingActivityTo(null)} className="text-slate-500 hover:text-white text-xs px-2">Cancel</button>
                       <button onClick={() => saveNewActivity(goal.id)} className="bg-indigo-600 text-white text-xs px-3 py-1 rounded hover:bg-indigo-500">Save</button>
                     </div>
@@ -510,21 +488,49 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       </div>
 
                       {editingActivityId === activity.id ? (
-                        <div className="flex items-center flex-1 gap-2">
+                        <div className="flex items-center flex-1 gap-2 flex-wrap">
                           <input
                             autoFocus
                             value={tempActivityName}
                             onChange={(e) => setTempActivityName(e.target.value)}
-                            className="flex-1 bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                            className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
                           />
-                          <button onClick={() => saveActivityName(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
-                          <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
+                          <select
+                            value={tempActivityFreq}
+                            onChange={(e) => setTempActivityFreq(e.target.value as any)}
+                            className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                          >
+                            <option>Daily</option>
+                            <option>Weekly</option>
+                            <option>Monthly</option>
+                            <option>Once</option>
+                          </select>
+                          {tempActivityFreq === 'Once' && (
+                            <input
+                              type="date"
+                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                              value={tempActivityDeadline}
+                              onChange={(e) => setTempActivityDeadline(e.target.value)}
+                            />
+                          )}
+                          <div className="flex gap-1">
+                            <button onClick={() => saveActivityChanges(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
+                            <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
+                          </div>
                         </div>
                       ) : (
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
                             <span className={`text-sm truncate ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
-                            <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+                            <div className="flex items-center gap-2">
+                              {activity.frequency === 'Once' && activity.deadline && (
+                                <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                                  <Calendar className="w-2.5 h-2.5" />
+                                  {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                </span>
+                              )}
+                              <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+                            </div>
                           </div>
                         </div>
                       )}

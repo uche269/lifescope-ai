@@ -5,6 +5,7 @@ import { TrendingUp, CheckCircle2, AlertCircle, Sparkles, FileText, X, Download,
 import { generateAnnualReport } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { checkIsCompleted } from '../utils/activityUtils';
 
 interface DashboardProps {
   goals: Goal[];
@@ -17,6 +18,10 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
   const [reportContent, setReportContent] = useState<string | null>(null);
 
   const completedGoals = goals.filter(g => g.progress === 100).length;
+  // Calculate total completed activities using the shared utility logic
+  const completedActivities = goals.reduce((acc, g) => {
+    return acc + g.activities.filter(a => checkIsCompleted(a)).length;
+  }, 0);
   // Consider any goal not 100% complete as "Active" (In Progress or Not Started)
   const activeGoals = goals.filter(g => g.progress < 100).length;
   const overallProgress = goals.length > 0
@@ -240,14 +245,14 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-600/10 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
           <div className="flex justify-between items-start mb-4">
             <div>
-              <p className="text-slate-400 text-sm font-medium">Completed Goals</p>
-              <h3 className="text-3xl font-bold text-white mt-1">{completedGoals}</h3>
+              <p className="text-slate-400 text-sm font-medium">Activities Done</p>
+              <h3 className="text-3xl font-bold text-white mt-1">{completedActivities}</h3>
             </div>
             <div className="p-2 bg-emerald-500/20 rounded-lg">
               <CheckCircle2 className="w-6 h-6 text-emerald-400" />
             </div>
           </div>
-          <p className="text-xs text-emerald-300">Keep up the momentum</p>
+          <p className="text-xs text-emerald-300">Across all goals</p>
         </div>
 
         <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
