@@ -121,6 +121,30 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
     document.body.removeChild(element);
   };
 
+  // Calculate Approaching Deadlines (Next 7 days) and Missed Goals
+  const now = new Date();
+  const nextWeek = new Date();
+  nextWeek.setDate(now.getDate() + 7);
+
+  const approachingGoals = goals.filter(g => {
+    if (!g.deadline || g.progress === 100) return false;
+    const d = new Date(g.deadline);
+    // Determine if it is in the future but approaching
+    const deadlineDate = new Date(d.setHours(0, 0, 0, 0));
+    const todayDate = new Date(new Date().setHours(0, 0, 0, 0));
+    const nextWeekDate = new Date(nextWeek.setHours(0, 0, 0, 0));
+
+    return deadlineDate >= todayDate && deadlineDate <= nextWeekDate;
+  });
+
+  const missedGoals = goals.filter(g => {
+    if (!g.deadline || g.progress === 100) return false;
+    const d = new Date(g.deadline);
+    const deadlineDate = new Date(d.setHours(0, 0, 0, 0));
+    const todayDate = new Date(new Date().setHours(0, 0, 0, 0));
+    return deadlineDate < todayDate;
+  });
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header Section */}
@@ -240,6 +264,51 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
           <p className="text-xs text-amber-300">Goals in progress</p>
         </div>
       </div>
+
+      {/* Approaching & Missed Goals Section */}
+      {(approachingGoals.length > 0 || missedGoals.length > 0) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {approachingGoals.length > 0 && (
+            <div className="glass-panel p-6 rounded-2xl border-l-4 border-l-amber-500">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                Approaching Deadlines
+              </h3>
+              <div className="space-y-3">
+                {approachingGoals.map(g => (
+                  <div key={g.id} className="bg-slate-900/60 p-3 rounded-lg flex justify-between items-center">
+                    <div>
+                      <div className="text-sm font-medium text-slate-200">{g.title}</div>
+                      <div className="text-xs text-slate-500">{new Date(g.deadline!).toLocaleDateString()}</div>
+                    </div>
+                    <div className="text-xs font-mono text-amber-400">{g.progress}%</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {missedGoals.length > 0 && (
+            <div className="glass-panel p-6 rounded-2xl border-l-4 border-l-red-500">
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-500" />
+                Missed Goals
+              </h3>
+              <div className="space-y-3">
+                {missedGoals.map(g => (
+                  <div key={g.id} className="bg-slate-900/60 p-3 rounded-lg flex justify-between items-center border border-red-500/10">
+                    <div>
+                      <div className="text-sm font-medium text-slate-200">{g.title}</div>
+                      <div className="text-xs text-red-400">Due {new Date(g.deadline!).toLocaleDateString()}</div>
+                    </div>
+                    <div className="text-xs font-mono text-red-400">{g.progress}%</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main Chart Section */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

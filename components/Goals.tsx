@@ -21,8 +21,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     id?: string,
     title: string,
     category: GoalCategory,
-    priority: 'High' | 'Medium' | 'Low'
-  }>({ title: '', category: GoalCategory.PERSONAL, priority: 'Medium' });
+    priority: 'High' | 'Medium' | 'Low',
+    deadline?: string
+  }>({ title: '', category: GoalCategory.PERSONAL, priority: 'Medium', deadline: '' });
 
   // Activity Editing State
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
@@ -31,15 +32,21 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   // New Activity State (Inline Form)
   const [addingActivityTo, setAddingActivityTo] = useState<string | null>(null);
   const [newActivityName, setNewActivityName] = useState('');
-  const [newActivityFreq, setNewActivityFreq] = useState<'Daily' | 'Weekly' | 'Monthly'>('Weekly');
+  const [newActivityFreq, setNewActivityFreq] = useState<'Daily' | 'Weekly' | 'Monthly' | 'Once'>('Weekly');
 
   const openAddModal = () => {
-    setGoalForm({ title: '', category: GoalCategory.PERSONAL, priority: 'Medium' });
+    setGoalForm({ title: '', category: GoalCategory.PERSONAL, priority: 'Medium', deadline: '' });
     setShowAddModal(true);
   };
 
   const openEditModal = (goal: Goal) => {
-    setGoalForm({ id: goal.id, title: goal.title, category: goal.category, priority: goal.priority });
+    setGoalForm({
+      id: goal.id,
+      title: goal.title,
+      category: goal.category,
+      priority: goal.priority,
+      deadline: goal.deadline || ''
+    });
     setShowEditModal(goal.id);
   };
 
@@ -53,7 +60,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         .update({
           title: goalForm.title,
           category: goalForm.category,
-          priority: goalForm.priority
+          priority: goalForm.priority,
+          deadline: goalForm.deadline || null
         })
         .eq('id', goalForm.id);
 
@@ -62,7 +70,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           ...g,
           title: goalForm.title,
           category: goalForm.category,
-          priority: goalForm.priority
+          priority: goalForm.priority,
+          deadline: goalForm.deadline
         } : g));
         setShowEditModal(null);
       }
@@ -77,7 +86,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           priority: goalForm.priority,
           description: '',
           progress: 0,
-          status: 'Not Started'
+          status: 'Not Started',
+          deadline: goalForm.deadline || null
         }])
         .select()
         .single();
@@ -353,20 +363,33 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
               ))}
             </select>
 
-            <label className="block text-xs text-slate-400 mb-1">Priority Level</label>
-            <div className="flex gap-4 mb-6">
-              {['High', 'Medium', 'Low'].map(p => (
-                <label key={p} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="priority"
-                    checked={goalForm.priority === p}
-                    onChange={() => setGoalForm({ ...goalForm, priority: p as any })}
-                    className="accent-indigo-500"
-                  />
-                  <span className={`text-sm ${p === 'High' ? 'text-red-400' : 'text-slate-300'}`}>{p}</span>
-                </label>
-              ))}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Deadline (Optional)</label>
+                <input
+                  type="date"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white focus:border-indigo-500 focus:outline-none custom-date-icon"
+                  value={goalForm.deadline || ''}
+                  onChange={(e) => setGoalForm({ ...goalForm, deadline: e.target.value })}
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Priority Level</label>
+                <div className="flex gap-4 items-center h-[46px]">
+                  {['High', 'Medium', 'Low'].map(p => (
+                    <label key={p} className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="priority"
+                        checked={goalForm.priority === p}
+                        onChange={() => setGoalForm({ ...goalForm, priority: p as any })}
+                        className="accent-indigo-500"
+                      />
+                      <span className={`text-sm ${p === 'High' ? 'text-red-400' : 'text-slate-300'}`}>{p}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
             </div>
 
             <div className="flex justify-end gap-3">
@@ -393,6 +416,12 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                 <div className="flex items-center gap-2 mb-1">
                   <span className="text-xs font-mono text-indigo-400 uppercase tracking-wider">{goal.category}</span>
                   {goal.priority === 'High' && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 rounded border border-red-500/30">HIGH</span>}
+                  {goal.deadline && (
+                    <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 rounded border border-slate-700 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(goal.deadline).toLocaleDateString()}
+                    </span>
+                  )}
                 </div>
                 <h3 className="text-xl font-bold text-white mt-1 pr-8">{goal.title}</h3>
               </div>
@@ -453,6 +482,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       <option>Daily</option>
                       <option>Weekly</option>
                       <option>Monthly</option>
+                      <option>Once</option>
                     </select>
                     <div className="flex gap-2">
                       <button onClick={() => setAddingActivityTo(null)} className="text-slate-500 hover:text-white text-xs px-2">Cancel</button>
