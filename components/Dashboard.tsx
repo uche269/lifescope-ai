@@ -118,6 +118,9 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
     if (provider === 'claude') {
       const { generateAnnualReportClaude } = await import('../services/claudeService');
       report = await generateAnnualReportClaude(userData);
+    } else if (provider === 'openai') {
+      const { generateAnnualReportOpenAI } = await import('../services/openaiService');
+      report = await generateAnnualReportOpenAI(userData);
     } else {
       report = await generateAnnualReport(userData);
     }

@@ -1,18 +1,19 @@
-import Anthropic from '@anthropic-ai/sdk';
 
-const getClaude = () => {
-    const apiKey = localStorage.getItem('ls_anthropic_key') || import.meta.env.VITE_ANTHROPIC_API_KEY || '';
-    if (!apiKey) throw new Error("Anthropic API Key not found");
+import OpenAI from 'openai';
 
-    return new Anthropic({
+const getOpenAI = () => {
+    const apiKey = localStorage.getItem('ls_openai_key') || import.meta.env.VITE_OPENAI_API_KEY || '';
+    if (!apiKey) throw new Error("OpenAI API Key not found");
+
+    return new OpenAI({
         apiKey: apiKey,
         dangerouslyAllowBrowser: true // Required for client-side usage if not using a proxy
     });
 };
 
-export const generateAnnualReportClaude = async (userData: any) => {
+export const generateAnnualReportOpenAI = async (userData: any) => {
     try {
-        const anthropic = getClaude();
+        const openai = getOpenAI();
 
         const prompt = `
             You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
@@ -38,28 +39,19 @@ export const generateAnnualReportClaude = async (userData: any) => {
             Write in clear, professional paragraphs.
         `;
 
-        const msg = await anthropic.messages.create({
-            model: "claude-3-5-sonnet-20241022",
-            max_tokens: 2000,
-            temperature: 0.7,
-            system: "You are a professional strategic coach. Output plain text only. No markdown formatting.",
+        const response = await openai.chat.completions.create({
+            model: "gpt-4-turbo-preview",
             messages: [
+                { role: "system", content: "You are a professional strategic coach. Output plain text only. No markdown formatting." },
                 { role: "user", content: prompt }
-            ]
+            ],
+            temperature: 0.7,
         });
 
-        // Helper to extract text from ContentBlock
-        const getText = (block: Anthropic.ContentBlock): string => {
-            if (block.type === 'text') {
-                return block.text;
-            }
-            return '';
-        };
-
-        return msg.content.map(getText).join('\n');
+        return response.choices[0].message.content || "No report generated.";
 
     } catch (error: any) {
-        console.error("Claude Report Error:", error);
-        return `Unable to generate report with Claude. Error: ${error.message || 'Unknown error'}. Please check your API Key in Settings.`;
+        console.error("OpenAI Report Error:", error);
+        return `Unable to generate report with OpenAI. Error: ${error.message || 'Unknown error'}. Please check your API Key in Settings.`;
     }
 }
