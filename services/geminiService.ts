@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
+import { logError } from '../utils/debugLogger';
 
 // Helper to initialize AI with dynamic key
 const getAI = () => {
@@ -262,9 +263,13 @@ export const generateAnnualReport = async (userData: any) => {
     });
 
     return response.text;
-  } catch (error) {
-    console.error("Annual Report Error:", error);
-    return "Unable to generate report. Please try again later.";
+  } catch (error: any) {
+    if (error.message?.includes('404')) {
+      console.warn("Gemini 1.5-flash not found, falling back to pro-vision");
+    }
+    logError("Gemini API Error", { message: error.message, details: error });
+    // Return a user-friendly error string instead of crashing
+    return `AI Error: Unable to generate report. Details: ${error.message || 'Unknown error'}`;
   }
 }
 

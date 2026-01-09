@@ -194,7 +194,14 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       alert("Failed to save activity status: " + error.message);
       return;
     }
-    logError("Toggle Activity DB Success", { data: "Updated successfully", newStatus, newTimestamp });
+
+    // Check if we actually updated anything
+    const { data: updatedData } = await supabase.from('activities').select('id').eq('id', activityId);
+    logError("Toggle Activity DB Check", {
+      status: "Update ran",
+      activityId,
+      verifiedRow: updatedData && updatedData.length > 0 ? "FOUND" : "MISSING/RLS BLOCKED"
+    });
 
     // Update Local State
     const updatedActivities = goal.activities.map(a =>
