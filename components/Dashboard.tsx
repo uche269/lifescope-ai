@@ -18,8 +18,6 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
   const { user } = useAuth(); // Get user for name
 
   const activeFocus = useMemo(() => {
-    const highPriority = goals.filter(g => g.price === 'High'); // This logic was flawed in original too, assuming priority exists. 
-    // Wait, type definition says priority is 'High' | 'Medium' | 'Low'.
     const highPriority = goals.filter(g => g.priority === 'High');
     if (highPriority.length === 0) return { title: "Define a High Priority Goal", category: "Planning" };
     // Return the one with lowest progress to focus on
@@ -114,7 +112,7 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
       }
     };
 
-    const report = await generateAnnualReport(userData);
+    const report = await generateAnnualReportClaude(userData);
     setReportContent(report);
     setGeneratingReport(false);
   };

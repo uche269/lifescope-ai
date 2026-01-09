@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Goal, GoalCategory, Activity } from '../types';
-import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff } from 'lucide-react';
+import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles } from 'lucide-react';
 import { getAIRecommendation } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
