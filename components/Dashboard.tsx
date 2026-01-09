@@ -16,8 +16,9 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [reportContent, setReportContent] = useState<string | null>(null);
 
-  const completedGoals = goals.filter(g => g.status === 'Completed').length;
-  const activeGoals = goals.filter(g => g.status === 'In Progress').length;
+  const completedGoals = goals.filter(g => g.progress === 100).length;
+  // Consider any goal not 100% complete as "Active" (In Progress or Not Started)
+  const activeGoals = goals.filter(g => g.progress < 100).length;
   const overallProgress = goals.length > 0
     ? Math.round(goals.reduce((acc, g) => acc + g.progress, 0) / goals.length)
     : 0;

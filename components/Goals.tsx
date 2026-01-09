@@ -195,13 +195,21 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
     const progress = updatedActivities.length ? Math.round((completedCount / updatedActivities.length) * 100) : 0;
 
-    // Update Goal Progress in DB
-    await supabase.from('goals').update({ progress }).eq('id', goalId);
+    // Recalculate Status based on Progress
+    let newGoalStatus: 'Not Started' | 'In Progress' | 'Completed' = 'In Progress';
+    if (progress === 100) newGoalStatus = 'Completed';
+    else if (progress === 0) newGoalStatus = 'Not Started';
+
+    // Update Goal Progress & Status in DB
+    await supabase.from('goals').update({
+      progress,
+      status: newGoalStatus
+    }).eq('id', goalId);
 
     // Update Local State
     setGoals(goals.map(g => {
       if (g.id !== goalId) return g;
-      return { ...g, activities: updatedActivities, progress };
+      return { ...g, activities: updatedActivities, progress, status: newGoalStatus };
     }));
   };
 
@@ -242,17 +250,23 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       }
     }));
 
-    // Update Goal Progress in DB (since total count changed)
-    // We can just rely on the next render or sync, but better to update now.
-    // However, recalculating exactly matches local state logic.
-    // Let's do a quiet update to goals table for progress
-    // (Calculation Logic duplicated above)
-    // To be precise:
-    // const goal = goals.find(g => g.id === goalId);
-    // const total = goal.activities.length + 1;
-    // const completed = goal.activities.filter(a => a.isCompleted).length;
-    // const progress = Math.round(completed/total * 100);
-    // await supabase.from('goals').update({ progress }).eq('id', goalId);
+    // Recalculate based on new total
+    const goal = goals.find(g => g.id === goalId);
+    if (goal) {
+      const newTotal = goal.activities.length + 1;
+      const completedCount = goal.activities.filter(a => a.isCompleted).length;
+      // inherited completion status is false for new activity
+      const newProgress = Math.round((completedCount / newTotal) * 100);
+
+      let newStatus: 'Not Started' | 'In Progress' | 'Completed' = 'In Progress';
+      if (newProgress === 100) newStatus = 'Completed';
+      else if (newProgress === 0) newStatus = 'Not Started';
+
+      await supabase.from('goals').update({
+        progress: newProgress,
+        status: newStatus
+      }).eq('id', goalId);
+    }
 
     setAddingActivityTo(null);
     setNewActivityName('');
