@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Goal, GoalCategory, Activity } from '../types';
-import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { getAIRecommendation } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
@@ -30,6 +30,13 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   // Activity Editing State
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [showCompletedMap, setShowCompletedMap] = useState<Record<string, boolean>>({});
+
+  // Expanded Goals State
+  const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>({});
+
+  const toggleExpand = (goalId: string) => {
+    setExpandedGoals(prev => ({ ...prev, [goalId]: !prev[goalId] }));
+  };
 
   // Temporary state for editing activity
   const [tempActivityName, setTempActivityName] = useState('');
@@ -418,210 +425,220 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 md:gap-6">
-        {goals.map(goal => (
-          <div key={goal.id} className="glass-panel rounded-2xl p-4 md:p-6 border-l-4 border-l-indigo-500 relative group/card">
+        {goals.map(goal => {
+          const isExpanded = expandedGoals[goal.id];
+          return (
+            <div key={goal.id} className={`glass-panel rounded-2xl p-4 md:p-6 border-l-4 border-l-indigo-500 relative group/card transition-all duration-300 ${isExpanded ? 'row-span-2' : ''}`}>
 
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-indigo-400 uppercase tracking-wider">{goal.category}</span>
-                  {goal.priority === 'High' && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 rounded border border-red-500/30">HIGH</span>}
-                  {goal.deadline && (
-                    <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 rounded border border-slate-700 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(goal.deadline).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-                <h3 className="text-xl font-bold text-white mt-1 pr-8">{goal.title}</h3>
-              </div>
-
-              <div className="flex gap-2">
-                <button onClick={() => openEditModal(goal)} className="text-slate-600 hover:text-indigo-400 transition-colors">
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button onClick={() => deleteGoal(goal.id)} className="text-slate-600 hover:text-red-400 transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="mb-6">
-              <div className="flex justify-between text-xs text-slate-400 mb-2">
-                <span>Progress</span>
-                <span>{goal.progress}%</span>
-              </div>
-              <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${goal.progress}%` }} />
-              </div>
-            </div>
-
-            <div className="space-y-3 mb-6">
-              <div className="flex justify-between items-center border-b border-slate-800 pb-2">
-                <div className="flex items-center gap-2">
-                  <h4 className="text-sm font-semibold text-slate-300">Activities</h4>
-                  <span className="text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded-full">
-                    {goal.activities.filter(a => checkIsCompleted(a)).length}/{goal.activities.length}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => setShowCompletedMap(prev => ({ ...prev, [goal.id]: !prev[goal.id] }))}
-                    className="text-xs text-slate-500 hover:text-indigo-400 flex items-center gap-1 transition-colors mr-2"
-                  >
-                    {showCompletedMap[goal.id] ? (
-                      <>
-                        <EyeOff className="w-3 h-3" /> Hide Done
-                      </>
-                    ) : (
-                      <>
-                        <Eye className="w-3 h-3" /> Show Done
-                      </>
+              <div className="flex justify-between items-start mb-4">
+                <div className="flex-1 min-w-0 pr-4">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className="text-xs font-mono text-indigo-400 uppercase tracking-wider">{goal.category}</span>
+                    {goal.priority === 'High' && <span className="text-[10px] bg-red-500/20 text-red-400 px-1.5 rounded border border-red-500/30">HIGH</span>}
+                    {goal.deadline && (
+                      <span className="text-[10px] bg-slate-800 text-slate-400 px-1.5 rounded border border-slate-700 flex items-center gap-1">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(goal.deadline).toLocaleDateString()}
+                      </span>
                     )}
-                  </button>
+                  </div>
+                  <h3 className={`text-xl font-bold text-white mt-1 pr-8 ${isExpanded ? 'whitespace-normal' : ''}`}>{goal.title}</h3>
+                </div>
+
+                <div className="flex gap-2">
                   <button
-                    onClick={() => setAddingActivityTo(goal.id)}
-                    className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-1 rounded transition-colors"
+                    onClick={() => toggleExpand(goal.id)}
+                    className="text-slate-500 hover:text-white transition-colors p-1"
+                    title={isExpanded ? "Collapse" : "Expand"}
                   >
-                    <Plus className="w-3 h-3" /> Add New
+                    {isExpanded ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+                  </button>
+                  <button onClick={() => openEditModal(goal)} className="text-slate-600 hover:text-indigo-400 transition-colors p-1">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => deleteGoal(goal.id)} className="text-slate-600 hover:text-red-400 transition-colors p-1">
+                    <Trash2 className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
-              {/* Inline Add Activity Form */}
-              {addingActivityTo === goal.id && (
-                <div className="bg-slate-900/80 p-3 rounded-lg border border-indigo-500/50 flex flex-col gap-2 animate-in slide-in-from-top-2">
-                  <input
-                    autoFocus
-                    placeholder="Activity name..."
-                    value={newActivityName}
-                    onChange={(e) => setNewActivityName(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
-                  />
-                  <div className="flex justify-between items-center gap-2">
-                    <select
-                      value={newActivityFreq}
-                      onChange={(e) => setNewActivityFreq(e.target.value as any)}
-                      className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+              {/* Progress Bar */}
+              <div className="mb-6">
+                <div className="flex justify-between text-xs text-slate-400 mb-2">
+                  <span>Progress</span>
+                  <span>{goal.progress}%</span>
+                </div>
+                <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
+                  <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${goal.progress}%` }} />
+                </div>
+              </div>
+
+              <div className="space-y-3 mb-6">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-semibold text-slate-300">Activities</h4>
+                    <span className="text-[10px] text-slate-500 bg-slate-900 px-1.5 py-0.5 rounded-full">
+                      {goal.activities.filter(a => checkIsCompleted(a)).length}/{goal.activities.length}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowCompletedMap(prev => ({ ...prev, [goal.id]: !prev[goal.id] }))}
+                      className="text-xs text-slate-500 hover:text-indigo-400 flex items-center gap-1 transition-colors mr-2"
                     >
-                      <option>Daily</option>
-                      <option>Weekly</option>
-                      <option>Monthly</option>
-                      <option>Once</option>
-                    </select>
-
-                    <input
-                      type="date"
-                      className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
-                      value={newActivityDeadline}
-                      onChange={(e) => setNewActivityDeadline(e.target.value)}
-                    />
-
-                    <div className="flex gap-2 ml-auto">
-                      <button onClick={() => setAddingActivityTo(null)} className="text-slate-500 hover:text-white text-xs px-2">Cancel</button>
-                      <button onClick={() => saveNewActivity(goal.id)} className="bg-indigo-600 text-white text-xs px-3 py-1 rounded hover:bg-indigo-500">Save</button>
-                    </div>
+                      {showCompletedMap[goal.id] ? (
+                        <>
+                          <EyeOff className="w-3 h-3" /> Hide Done
+                        </>
+                      ) : (
+                        <>
+                          <Eye className="w-3 h-3" /> Show Done
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => setAddingActivityTo(goal.id)}
+                      className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 bg-indigo-500/10 px-2 py-1 rounded transition-colors"
+                    >
+                      <Plus className="w-3 h-3" /> Add New
+                    </button>
                   </div>
                 </div>
-              )}
 
-              {goal.activities.length === 0 && !addingActivityTo && (
-                <p className="text-xs text-slate-500 italic">No activities added yet.</p>
-              )}
+                {/* Inline Add Activity Form */}
+                {addingActivityTo === goal.id && (
+                  <div className="bg-slate-900/80 p-3 rounded-lg border border-indigo-500/50 flex flex-col gap-2 animate-in slide-in-from-top-2">
+                    <input
+                      autoFocus
+                      placeholder="Activity name..."
+                      value={newActivityName}
+                      onChange={(e) => setNewActivityName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded px-2 py-1.5 text-xs text-white focus:border-indigo-500 focus:outline-none"
+                    />
+                    <div className="flex justify-between items-center gap-2">
+                      <select
+                        value={newActivityFreq}
+                        onChange={(e) => setNewActivityFreq(e.target.value as any)}
+                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                      >
+                        <option>Daily</option>
+                        <option>Weekly</option>
+                        <option>Monthly</option>
+                        <option>Once</option>
+                      </select>
 
-              <div className="max-h-[150px] overflow-y-auto space-y-2 pr-1 custom-scrollbar">
-                {goal.activities
-                  .filter(a => showCompletedMap[goal.id] || !checkIsCompleted(a)) // FILTER LOGIC
-                  .map(activity => {
-                    const isDone = checkIsCompleted(activity);
-                    return (
-                      <div key={activity.id} className="flex items-center gap-3 group bg-slate-900/30 p-2 rounded-lg hover:bg-slate-900/60 transition-colors">
-                        <div
-                          onClick={() => toggleActivity(goal.id, activity.id)}
-                          className={`cursor-pointer w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${isDone ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 hover:border-indigo-500'
-                            }`}
-                        >
-                          {isDone && <Check className="w-3 h-3 text-white" />}
-                        </div>
+                      <input
+                        type="date"
+                        className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                        value={newActivityDeadline}
+                        onChange={(e) => setNewActivityDeadline(e.target.value)}
+                      />
 
-                        {editingActivityId === activity.id ? (
-                          <div className="flex items-center flex-1 gap-2 flex-wrap">
-                            <input
-                              autoFocus
-                              value={tempActivityName}
-                              onChange={(e) => setTempActivityName(e.target.value)}
-                              className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
-                            />
-                            <select
-                              value={tempActivityFreq}
-                              onChange={(e) => setTempActivityFreq(e.target.value as any)}
-                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
-                            >
-                              <option>Daily</option>
-                              <option>Weekly</option>
-                              <option>Monthly</option>
-                              <option>Once</option>
-                            </select>
-                            <input
-                              type="date"
-                              className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
-                              value={tempActivityDeadline}
-                              onChange={(e) => setTempActivityDeadline(e.target.value)}
-                            />
-                            <div className="flex gap-1">
-                              <button onClick={() => saveActivityChanges(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
-                              <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
-                            </div>
+                      <div className="flex gap-2 ml-auto">
+                        <button onClick={() => setAddingActivityTo(null)} className="text-slate-500 hover:text-white text-xs px-2">Cancel</button>
+                        <button onClick={() => saveNewActivity(goal.id)} className="bg-indigo-600 text-white text-xs px-3 py-1 rounded hover:bg-indigo-500">Save</button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {goal.activities.length === 0 && !addingActivityTo && (
+                  <p className="text-xs text-slate-500 italic">No activities added yet.</p>
+                )}
+
+                <div className={`${isExpanded ? 'max-h-none' : 'max-h-[150px] overflow-y-auto'} space-y-2 pr-1 custom-scrollbar transition-all duration-300`}>
+                  {goal.activities
+                    .filter(a => showCompletedMap[goal.id] || !checkIsCompleted(a)) // FILTER LOGIC
+                    .map(activity => {
+                      const isDone = checkIsCompleted(activity);
+                      return (
+                        <div key={activity.id} className="flex items-center gap-3 group bg-slate-900/30 p-2 rounded-lg hover:bg-slate-900/60 transition-colors">
+                          <div
+                            onClick={() => toggleActivity(goal.id, activity.id)}
+                            className={`cursor-pointer w-5 h-5 rounded-md border flex items-center justify-center transition-all shrink-0 ${isDone ? 'bg-indigo-600 border-indigo-600' : 'border-slate-600 hover:border-indigo-500'
+                              }`}
+                          >
+                            {isDone && <Check className="w-3 h-3 text-white" />}
                           </div>
-                        ) : (
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center justify-between">
-                              <span className={`text-sm truncate ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
-                              <div className="flex items-center gap-2">
-                                {activity.deadline && (
-                                  <span className="text-[10px] text-amber-500 flex items-center gap-1">
-                                    <Calendar className="w-2.5 h-2.5" />
-                                    {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                  </span>
-                                )}
-                                <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+
+                          {editingActivityId === activity.id ? (
+                            <div className="flex items-center flex-1 gap-2 flex-wrap">
+                              <input
+                                autoFocus
+                                value={tempActivityName}
+                                onChange={(e) => setTempActivityName(e.target.value)}
+                                className="flex-1 min-w-[120px] bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                              />
+                              <select
+                                value={tempActivityFreq}
+                                onChange={(e) => setTempActivityFreq(e.target.value as any)}
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none"
+                              >
+                                <option>Daily</option>
+                                <option>Weekly</option>
+                                <option>Monthly</option>
+                                <option>Once</option>
+                              </select>
+                              <input
+                                type="date"
+                                className="bg-slate-950 border border-slate-700 rounded px-2 py-1 text-xs text-slate-300 focus:outline-none w-28"
+                                value={tempActivityDeadline}
+                                onChange={(e) => setTempActivityDeadline(e.target.value)}
+                              />
+                              <div className="flex gap-1">
+                                <button onClick={() => saveActivityChanges(goal.id, activity.id)}><Check className="w-3 h-3 text-emerald-400" /></button>
+                                <button onClick={() => setEditingActivityId(null)}><X className="w-3 h-3 text-red-400" /></button>
                               </div>
                             </div>
+                          ) : (
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center justify-between">
+                                <span className={`text-sm ${isExpanded ? 'whitespace-normal' : 'truncate'} ${isDone ? 'text-slate-500 line-through' : 'text-slate-300'}`}>{activity.name}</span>
+                                <div className="flex items-center gap-2 shrink-0 ml-2">
+                                  {activity.deadline && (
+                                    <span className="text-[10px] text-amber-500 flex items-center gap-1">
+                                      <Calendar className="w-2.5 h-2.5" />
+                                      {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  )}
+                                  <span className="text-[10px] text-slate-500 bg-slate-950 px-1.5 py-0.5 rounded border border-slate-800">{activity.frequency}</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => startEditActivity(activity)} className="p-1 text-slate-500 hover:text-indigo-400"><Edit2 className="w-3 h-3" /></button>
+                            <button onClick={() => deleteActivity(goal.id, activity.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
                           </div>
-                        )}
-
-                        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                          <button onClick={() => startEditActivity(activity)} className="p-1 text-slate-500 hover:text-indigo-400"><Edit2 className="w-3 h-3" /></button>
-                          <button onClick={() => deleteActivity(goal.id, activity.id)} className="p-1 text-slate-500 hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
                         </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-
-            {/* AI Section */}
-            <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
-              <div className="flex justify-between items-center mb-2">
-                <div className="flex items-center gap-2 text-indigo-400">
-                  <Sparkles className="w-4 h-4" />
-                  <span className="text-xs font-bold uppercase">AI Recommendations</span>
+                      );
+                    })}
                 </div>
-                <button
-                  onClick={() => generateAdvice(goal)}
-                  disabled={loadingAI === goal.id}
-                  className="text-xs bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 px-2 py-1 rounded transition-colors"
-                >
-                  {loadingAI === goal.id ? 'Generating...' : 'Refresh'}
-                </button>
               </div>
-              <div className="text-xs text-slate-400 leading-relaxed whitespace-pre-line clean-text">
-                {goal.aiRecommendations ? goal.aiRecommendations.replace(/[*#_]/g, '') : "Click refresh to generate actionable insights and identify pitfalls for this goal."}
+
+              {/* AI Section */}
+              <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-800">
+                <div className="flex justify-between items-center mb-2">
+                  <div className="flex items-center gap-2 text-indigo-400">
+                    <Sparkles className="w-4 h-4" />
+                    <span className="text-xs font-bold uppercase">AI Recommendations</span>
+                  </div>
+                  <button
+                    onClick={() => generateAdvice(goal)}
+                    disabled={loadingAI === goal.id}
+                    className="text-xs bg-indigo-600/20 text-indigo-300 hover:bg-indigo-600/40 px-2 py-1 rounded transition-colors"
+                  >
+                    {loadingAI === goal.id ? 'Generating...' : 'Refresh'}
+                  </button>
+                </div>
+                <div className={`text-xs text-slate-400 leading-relaxed whitespace-pre-line clean-text ${isExpanded ? '' : 'line-clamp-4'}`}>
+                  {goal.aiRecommendations ? goal.aiRecommendations.replace(/[*#_]/g, '') : "Click refresh to generate actionable insights and identify pitfalls for this goal."}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
