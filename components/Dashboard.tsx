@@ -167,14 +167,14 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       {/* Header Section */}
-      <div className="flex justify-between items-end">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-2">
+          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
             Welcome back, {user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'Boss'}
           </h1>
-          <p className="text-slate-400">Here's your LifeScope overview for today.</p>
+          <p className="text-slate-400 text-sm md:text-base">Here's your LifeScope overview for today.</p>
         </div>
-        <div className="bg-gradient-to-r from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 rounded-xl flex items-center gap-4 backdrop-blur-sm">
+        <div className="w-full md:w-auto bg-gradient-to-r from-indigo-900/40 to-slate-900 border border-indigo-500/30 p-4 rounded-xl flex items-center gap-4 backdrop-blur-sm">
           <div className="p-3 bg-indigo-600 rounded-lg shadow-lg shadow-indigo-600/30">
             <Target className="w-6 h-6 text-white" />
           </div>

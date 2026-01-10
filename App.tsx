@@ -15,11 +15,13 @@ import Diagnostics from './components/Diagnostics';
 import { supabase } from './lib/supabase';
 import { useAuth } from './contexts/AuthContext';
 import { checkIsCompleted } from './utils/activityUtils';
+import { Menu, BrainCircuit } from 'lucide-react'; // Added Menu icon
 
 const MainApp: React.FC = () => {
   const { user, loading: authLoading } = useAuth();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isSidebarOpen, setSidebarOpen] = useState(false); // Sidebar State
 
   // Initial Mock Data (used for seeding)
   const INITIAL_GOALS_TEMPLATE = [
@@ -169,10 +171,27 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-200 font-sans selection:bg-indigo-500/30">
-      <Sidebar />
 
-      <main className="pl-64 min-h-screen">
-        <div className="max-w-7xl mx-auto p-8 pt-10">
+      {/* Mobile Header */}
+      <div className="md:hidden flex items-center justify-between p-4 bg-slate-950 border-b border-slate-900 sticky top-0 z-30">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center">
+            <BrainCircuit className="text-white w-5 h-5" />
+          </div>
+          <span className="font-bold text-lg text-white">LifeScope</span>
+        </div>
+        <button
+          onClick={() => setSidebarOpen(true)}
+          className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition-colors"
+        >
+          <Menu className="w-6 h-6" />
+        </button>
+      </div>
+
+      <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
+
+      <main className="md:pl-64 min-h-screen transition-all duration-300">
+        <div className="max-w-7xl mx-auto p-4 md:p-8 pt-6 md:pt-10">
           <Routes>
             <Route path="/" element={<Dashboard goals={goals} />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
