@@ -1,0 +1,28 @@
+services:
+  app:
+    build: .
+    restart: always
+    ports:
+      - "80:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - DATABASE_URL=postgresql://lifescope:secure_password_123@db:5432/lifescope
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - SESSION_SECRET=${SESSION_SECRET}
+    depends_on:
+      - db
+
+  db:
+    image: postgres:15
+    restart: always
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=lifescope
+      - POSTGRES_PASSWORD=secure_password_123
+      - POSTGRES_DB=lifescope
+
+volumes:
+  db_data:
