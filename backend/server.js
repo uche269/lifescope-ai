@@ -102,6 +102,13 @@ passport.use(new GoogleStrategy({
             // Since we are migrating from Supabase, let's look at `auth.users` mock or creating a `public.users` table.
             // Simplified: Store in `public.users`
 
+            // Security: Check Whitelist
+            const allowedUsers = process.env.ALLOWED_USERS ? process.env.ALLOWED_USERS.split(',').map(e => e.trim()) : [];
+            if (allowedUsers.length > 0 && !allowedUsers.includes(email)) {
+                console.warn(`⛔ Login attempt blocked for: ${email}`);
+                return done(null, false, { message: 'Unauthorized email' });
+            }
+
             // 1. Check if user exists
             let { rows } = await pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
 
