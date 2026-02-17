@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-REPO_URL="https://github.com/Start-End-2025/lifescope-ai.git" # Replace with your actual repo URL if different
+REPO_URL="git@github.com:uche269/lifescope-ai.git"
 APP_DIR="/opt/lifescope"
 
 echo "=== deployment started ==="
