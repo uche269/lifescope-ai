@@ -26,9 +26,12 @@ const pool = new pg.Pool({
 // Init Database Schema
 const initDb = async () => {
     try {
+        // Ensure UUID extension
+        await pool.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS public.users (
-                id SERIAL PRIMARY KEY,
+                id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
                 email TEXT UNIQUE NOT NULL,
                 full_name TEXT,
                 avatar_url TEXT,
