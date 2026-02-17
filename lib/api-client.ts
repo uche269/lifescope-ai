@@ -18,11 +18,11 @@ export const apiClient = {
             return Promise.resolve({ data: {}, error: { message: "Magic Link login is not configured on this server. Please use Google Login." } });
         },
         signOut: async () => {
-            await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' });
+            await fetch(`${API_URL}/api/auth/logout`, { method: 'POST', credentials: 'include' });
             window.location.reload();
         },
         getSession: async () => {
-            const res = await fetch(`${API_URL}/api/auth/me`);
+            const res = await fetch(`${API_URL}/api/auth/me`, { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 return { data: { session: data.user ? { user: data.user } : null }, error: null };
@@ -39,7 +39,9 @@ export const apiClient = {
     from: (table: string) => {
         return {
             select: async () => {
-                const res = await fetch(`${API_URL}/api/data/${table}`);
+                const res = await fetch(`${API_URL}/api/data/${table}`, {
+                    credentials: 'include'
+                });
                 const json = await res.json();
                 return json;
             },
@@ -47,6 +49,7 @@ export const apiClient = {
                 const res = await fetch(`${API_URL}/api/data/${table}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
                     body: JSON.stringify(data)
                 });
                 const json = await res.json();

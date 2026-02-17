@@ -196,15 +196,16 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
     }
 
     try {
-        // Enforce Row Level Security (Manual) -> WHERE user_id = req.user.id
-        // Assuming all tables have user_id
-        let query = `SELECT * FROM public."${table}" WHERE user_id = $1`;
+        let query;
         const values = [req.user.id];
 
-        // Simple Ordering
-        if (order) {
-            // e.g. "created_at.desc" -> "ORDER BY created_at DESC"
-            // Very basic validation needed here to prevent injection
+        if (table === 'activities') {
+            // Activities don't have user_id — they link through goals
+            query = `SELECT a.* FROM public."activities" a 
+                     INNER JOIN public."goals" g ON a.goal_id = g.id 
+                     WHERE g.user_id = $1`;
+        } else {
+            query = `SELECT * FROM public."${table}" WHERE user_id = $1`;
         }
 
         const { rows } = await pool.query(query, values);
