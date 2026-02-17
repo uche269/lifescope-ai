@@ -14,7 +14,7 @@ WORKDIR /app
 # Copy backend definitions
 COPY backend/package*.json ./backend/
 WORKDIR /app/backend
-RUN npm ci --production
+RUN npm install --omit=dev
 
 # Copy backend source code
 COPY backend/ ./
