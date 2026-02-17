@@ -10,12 +10,12 @@ interface AuthContextType {
   signInWithMagicLink: (email: string) => Promise<{ error: any }>;
 }
 
-const AuthContext = createContext<AuthContextType>({ 
-    user: null, 
-    loading: true, 
-    signOut: async () => {},
-    signInWithGoogle: async () => ({ error: null }),
-    signInWithMagicLink: async () => ({ error: null })
+const AuthContext = createContext<AuthContextType>({
+  user: null,
+  loading: true,
+  signOut: async () => { },
+  signInWithGoogle: async () => ({ error: null }),
+  signInWithMagicLink: async () => ({ error: null })
 });
 
 const ALLOWED_EMAIL = 'uchechukwunnorom2004@gmail.com';
@@ -27,16 +27,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const checkUser = async (session: Session | null) => {
     const currentUser = session?.user;
     if (currentUser) {
-        if (currentUser.email === ALLOWED_EMAIL) {
-            setUser(currentUser);
-        } else {
-            console.warn(`Access denied for email: ${currentUser.email}`);
-            await supabase.auth.signOut();
-            setUser(null);
-            alert("Access Denied: You are not authorized to access this application.");
-        }
+      // Backend now handles whitelist check, so we trust the session.
+      setUser(currentUser);
     } else {
-        setUser(null);
+      setUser(null);
     }
     setLoading(false);
   };
@@ -61,23 +55,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogle = async () => {
     const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-            redirectTo: window.location.origin
-        }
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
     });
     return { error };
   };
 
   const signInWithMagicLink = async (email: string) => {
     if (email !== ALLOWED_EMAIL) {
-        return { error: { message: "Access Denied: This email is not authorized." } };
+      return { error: { message: "Access Denied: This email is not authorized." } };
     }
     const { error } = await supabase.auth.signInWithOtp({
-        email,
-        options: {
-            emailRedirectTo: window.location.origin
-        }
+      email,
+      options: {
+        emailRedirectTo: window.location.origin
+      }
     });
     return { error };
   };
