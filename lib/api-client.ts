@@ -6,9 +6,16 @@ const API_URL = import.meta.env.VITE_API_URL || ''; // Relative path in producti
 
 export const apiClient = {
     auth: {
-        signInWithGoogle: () => {
-            window.location.href = `${API_URL}/api/auth/google`;
-            return Promise.resolve({ error: null });
+        signInWithOAuth: ({ provider }: { provider: string }) => {
+            if (provider === 'google') {
+                window.location.href = `${API_URL}/api/auth/google`;
+                return Promise.resolve({ data: {}, error: null });
+            }
+            return Promise.resolve({ data: {}, error: { message: "Provider not supported" } });
+        },
+        signInWithOtp: async ({ email }: { email: string }) => {
+            console.warn("Magic Link not implemented on VPS backend");
+            return Promise.resolve({ data: {}, error: { message: "Magic Link login is not configured on this server. Please use Google Login." } });
         },
         signOut: async () => {
             await fetch(`${API_URL}/api/auth/logout`, { method: 'POST' });
