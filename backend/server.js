@@ -23,6 +23,25 @@ const pool = new pg.Pool({
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
+// Init Database Schema
+const initDb = async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS public.users (
+                id SERIAL PRIMARY KEY,
+                email TEXT UNIQUE NOT NULL,
+                full_name TEXT,
+                avatar_url TEXT,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+        console.log("✅ Database schema ensured");
+    } catch (err) {
+        console.error("❌ Database schema init failed:", err);
+    }
+};
+initDb();
+
 // Session Store
 const PgSession = connectPgSimple(session);
 
@@ -97,6 +116,7 @@ passport.use(new GoogleStrategy({
 
             return done(null, rows[0]);
         } catch (err) {
+            console.error("❌ Google Auth Error:", err);
             return done(err, null);
         }
     }
