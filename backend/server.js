@@ -37,7 +37,8 @@ app.use(express.urlencoded({ extended: true }));
 app.use(session({
     store: new PgSession({
         pool: pool,
-        tableName: 'session'
+        tableName: 'session',
+        createTableIfMissing: true
     }),
     secret: process.env.SESSION_SECRET || 'dev_secret',
     resave: false,
@@ -137,6 +138,20 @@ const ensureAuth = (req, res, next) => {
     }
     res.status(401).json({ error: "Unauthorized" });
 };
+
+// Health Check
+app.get('/api/health', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW()');
+        res.json({
+            status: 'ok',
+            timestamp: result.rows[0].now,
+            user: req.user ? 'logged_in' : 'anonymous'
+        });
+    } catch (err) {
+        res.status(500).json({ status: 'error', message: err.message });
+    }
+});
 
 // Data Routes (Adapting Supabase calls)
 // Generic "table" endpoint for simple CRUD - Replicates supabase.from('table').select()
