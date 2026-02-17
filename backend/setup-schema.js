@@ -11,8 +11,8 @@ dotenv.config({ path: path.join(__dirname, '../.env') });
 const connectionString = process.env.DATABASE_URL || 'postgresql://lifescope_user:Nuujj78rfw@76.13.48.189:5432/lifescope';
 
 const pool = new pg.Pool({
-    connectionString,
-    ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
+  connectionString,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
 });
 
 const schemaSQL = `
@@ -70,7 +70,9 @@ CREATE TABLE public.activities (
   name TEXT NOT NULL,
   is_completed BOOLEAN DEFAULT false,
   frequency TEXT CHECK (frequency in ('Daily', 'Weekly', 'Monthly', 'Once')),
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+  last_completed_at TIMESTAMP WITH TIME ZONE,
+  deadline TIMESTAMP WITH TIME ZONE
 );
 
 -- Create Weight Logs Table
@@ -117,16 +119,16 @@ ALTER TABLE public.food_logs ENABLE ROW LEVEL SECURITY;
 `;
 
 const run = async () => {
-    try {
-        console.log("⏳ Resetting database schema...");
-        await pool.query(schemaSQL);
-        console.log("✅ Database schema restored successfully!");
-        console.log("NOTE: 'public.users' is now UUID-based. You will need to log in again.");
-    } catch (err) {
-        console.error("❌ Schema reset failed:", err);
-    } finally {
-        await pool.end();
-    }
+  try {
+    console.log("⏳ Resetting database schema...");
+    await pool.query(schemaSQL);
+    console.log("✅ Database schema restored successfully!");
+    console.log("NOTE: 'public.users' is now UUID-based. You will need to log in again.");
+  } catch (err) {
+    console.error("❌ Schema reset failed:", err);
+  } finally {
+    await pool.end();
+  }
 };
 
 run();
