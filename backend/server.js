@@ -187,25 +187,68 @@ app.get('/api/health', async (req, res) => {
 // Generic "table" endpoint for simple CRUD - Replicates supabase.from('table').select()
 app.get('/api/data/:table', ensureAuth, async (req, res) => {
     const { table } = req.params;
-    const { select, order, user_id_filter } = req.query; // Simple query params
+    const { select, order } = req.query;
 
     // Security: Whitelist allowed tables
-    const allowedTables = ['goals', 'activities', 'categories'];
+    const allowedTables = ['goals', 'activities', 'categories', 'weight_logs', 'measurements', 'food_logs'];
     if (!allowedTables.includes(table)) {
         return res.status(403).json({ error: "Access denied to table" });
     }
 
     try {
-        let query;
         const values = [req.user.id];
 
+        // Handle goals with nested activities (Supabase-style: select('*, activities (*)'))
+        if (table === 'goals' && select && select.includes('activities')) {
+            // First get goals
+            let goalsQuery = `SELECT * FROM public."goals" WHERE user_id = $1`;
+            if (order) {
+                const [col, dir] = order.split('.');
+                const safeCol = col.replace(/[^a-z_]/g, '');
+                const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
+                goalsQuery += ` ORDER BY "${safeCol}" ${safeDir}`;
+            }
+            const { rows: goals } = await pool.query(goalsQuery, values);
+
+            // Then get all activities for these goals
+            if (goals.length > 0) {
+                const goalIds = goals.map(g => g.id);
+                const placeholders = goalIds.map((_, i) => `$${i + 1}`).join(',');
+                const { rows: activities } = await pool.query(
+                    `SELECT * FROM public."activities" WHERE goal_id IN (${placeholders})`,
+                    goalIds
+                );
+
+                // Nest activities inside their goals
+                const goalMap = {};
+                goals.forEach(g => {
+                    goalMap[g.id] = { ...g, activities: [] };
+                });
+                activities.forEach(a => {
+                    if (goalMap[a.goal_id]) {
+                        goalMap[a.goal_id].activities.push(a);
+                    }
+                });
+                return res.json({ data: Object.values(goalMap), error: null });
+            }
+            return res.json({ data: goals, error: null });
+        }
+
+        // Standard query
+        let query;
         if (table === 'activities') {
-            // Activities don't have user_id — they link through goals
             query = `SELECT a.* FROM public."activities" a 
                      INNER JOIN public."goals" g ON a.goal_id = g.id 
                      WHERE g.user_id = $1`;
         } else {
             query = `SELECT * FROM public."${table}" WHERE user_id = $1`;
+        }
+
+        if (order) {
+            const [col, dir] = order.split('.');
+            const safeCol = col.replace(/[^a-z_]/g, '');
+            const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
+            query += ` ORDER BY "${safeCol}" ${safeDir}`;
         }
 
         const { rows } = await pool.query(query, values);
@@ -221,14 +264,16 @@ app.post('/api/data/:table', ensureAuth, async (req, res) => {
     const { table } = req.params;
     const payload = req.body;
 
-    const allowedTables = ['goals', 'activities'];
+    const allowedTables = ['goals', 'activities', 'weight_logs', 'measurements', 'food_logs'];
     if (!allowedTables.includes(table)) {
         return res.status(403).json({ error: "Access denied" });
     }
 
     try {
-        // Force user_id
-        payload.user_id = req.user.id;
+        // Force user_id for tables that have it (not activities)
+        if (table !== 'activities') {
+            payload.user_id = req.user.id;
+        }
 
         const keys = Object.keys(payload);
         const values = Object.values(payload);
@@ -243,6 +288,51 @@ app.post('/api/data/:table', ensureAuth, async (req, res) => {
     } catch (err) {
         console.error(err);
         res.status(500).json({ data: null, error: { message: err.message } });
+    }
+});
+
+// Update
+app.put('/api/data/:table', ensureAuth, async (req, res) => {
+    const { table } = req.params;
+    const payload = req.body;
+    const { id } = req.query;
+
+    const allowedTables = ['goals', 'activities', 'weight_logs', 'measurements', 'food_logs'];
+    if (!allowedTables.includes(table) || !id) {
+        return res.status(403).json({ error: "Access denied or missing id" });
+    }
+
+    try {
+        const keys = Object.keys(payload);
+        const values = Object.values(payload);
+        const setStr = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
+        values.push(id);
+
+        const query = `UPDATE public."${table}" SET ${setStr} WHERE id = $${values.length} RETURNING *`;
+        const { rows } = await pool.query(query, values);
+        res.json({ data: rows[0], error: null });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ data: null, error: { message: err.message } });
+    }
+});
+
+// Delete
+app.delete('/api/data/:table', ensureAuth, async (req, res) => {
+    const { table } = req.params;
+    const { id } = req.query;
+
+    const allowedTables = ['goals', 'activities', 'weight_logs', 'measurements', 'food_logs'];
+    if (!allowedTables.includes(table) || !id) {
+        return res.status(403).json({ error: "Access denied or missing id" });
+    }
+
+    try {
+        await pool.query(`DELETE FROM public."${table}" WHERE id = $1`, [id]);
+        res.json({ error: null });
+    } catch (err) {
+        console.error(err);
+        res.status(500).json({ error: { message: err.message } });
     }
 });
 

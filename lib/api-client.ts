@@ -38,28 +38,106 @@ export const apiClient = {
     },
     from: (table: string) => {
         return {
-            select: async () => {
-                const res = await fetch(`${API_URL}/api/data/${table}`, {
-                    credentials: 'include'
-                });
-                const json = await res.json();
-                return json;
+            select: (columns?: string) => {
+                // Build a chainable query object
+                const params = new URLSearchParams();
+                if (columns) params.set('select', columns);
+
+                const queryBuilder: any = {
+                    order: (column: string, opts?: { ascending?: boolean }) => {
+                        params.set('order', `${column}.${opts?.ascending === false ? 'desc' : 'asc'}`);
+                        return queryBuilder;
+                    },
+                    eq: (column: string, value: string) => {
+                        params.set(`filter_${column}`, value);
+                        return queryBuilder;
+                    },
+                    single: () => {
+                        params.set('single', 'true');
+                        return queryBuilder;
+                    },
+                    then: (resolve: any, reject?: any) => {
+                        const qs = params.toString();
+                        const url = `${API_URL}/api/data/${table}${qs ? '?' + qs : ''}`;
+                        return fetch(url, { credentials: 'include' })
+                            .then(r => r.json())
+                            .then(resolve, reject);
+                    }
+                };
+                return queryBuilder;
             },
-            insert: async (data: any) => {
-                const res = await fetch(`${API_URL}/api/data/${table}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    credentials: 'include',
-                    body: JSON.stringify(data)
-                });
-                const json = await res.json();
-                // Supabase returns { data: [row], error }
-                // Our API returns { data: row, error }
-                return { data: json.data ? [json.data] : null, error: json.error };
+            insert: (data: any) => {
+                const insertBuilder: any = {
+                    _data: null as any,
+                    _single: false,
+                    select: () => {
+                        return insertBuilder;
+                    },
+                    single: () => {
+                        insertBuilder._single = true;
+                        return insertBuilder;
+                    },
+                    then: (resolve: any, reject?: any) => {
+                        return fetch(`${API_URL}/api/data/${table}`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(data)
+                        })
+                            .then(r => r.json())
+                            .then(json => {
+                                if (insertBuilder._single) {
+                                    return { data: json.data, error: json.error };
+                                }
+                                return { data: json.data ? [json.data] : null, error: json.error };
+                            })
+                            .then(resolve, reject);
+                    }
+                };
+                return insertBuilder;
             },
-            // Add update/delete placeholders as needed
-            update: async () => ({ error: "Not implemented yet" }),
-            delete: async () => ({ error: "Not implemented yet" })
+            update: (data: any) => {
+                const updateBuilder: any = {
+                    _eqs: {} as Record<string, string>,
+                    eq: (column: string, value: string) => {
+                        updateBuilder._eqs[column] = value;
+                        return updateBuilder;
+                    },
+                    select: () => updateBuilder,
+                    single: () => updateBuilder,
+                    then: (resolve: any, reject?: any) => {
+                        const params = new URLSearchParams(updateBuilder._eqs);
+                        return fetch(`${API_URL}/api/data/${table}?${params}`, {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            credentials: 'include',
+                            body: JSON.stringify(data)
+                        })
+                            .then(r => r.json())
+                            .then(resolve, reject);
+                    }
+                };
+                return updateBuilder;
+            },
+            delete: () => {
+                const deleteBuilder: any = {
+                    _eqs: {} as Record<string, string>,
+                    eq: (column: string, value: string) => {
+                        deleteBuilder._eqs[column] = value;
+                        return deleteBuilder;
+                    },
+                    then: (resolve: any, reject?: any) => {
+                        const params = new URLSearchParams(deleteBuilder._eqs);
+                        return fetch(`${API_URL}/api/data/${table}?${params}`, {
+                            method: 'DELETE',
+                            credentials: 'include'
+                        })
+                            .then(r => r.json())
+                            .then(resolve, reject);
+                    }
+                };
+                return deleteBuilder;
+            }
         };
     }
 };
