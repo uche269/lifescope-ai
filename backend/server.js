@@ -361,9 +361,9 @@ app.get('/api/auth/me', async (req, res) => {
         const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
         const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
 
-        // AI limits per plan (disabled - all users have unlimited)
-        const limits = { free: 999999, pro: 999999, premium: 999999 };
-        const aiLimit = limits[effectivePlan] || 999999;
+        // AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
+        const limits = { free: 10, pro: 50, premium: 999999 };
+        const aiLimit = limits[effectivePlan] ?? 10;
 
         res.json({
             user: {

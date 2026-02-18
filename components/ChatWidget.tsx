@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { MessageCircle, X, Send, AlertCircle, Loader2 } from 'lucide-react';
+import { MessageCircle, X, Send, AlertCircle, Loader2, Minus, Maximize2 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { chatWithSupport } from '../services/geminiService';
 import { chatFAQ } from '../services/chatFAQ';
@@ -24,6 +24,7 @@ const ChatWidget: React.FC = () => {
     ]);
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [isMinimized, setIsMinimized] = useState(false);
     const [failedExchanges, setFailedExchanges] = useState(0);
     const [escalated, setEscalated] = useState(false);
     const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -140,7 +141,7 @@ const ChatWidget: React.FC = () => {
 
             {/* Chat Panel */}
             {isOpen && (
-                <div className="fixed bottom-6 right-6 z-50 w-[380px] h-[520px] flex flex-col bg-slate-950/95 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl shadow-black/50 animate-page-enter overflow-hidden">
+                <div className={`fixed bottom-6 right-6 z-50 w-[380px] flex flex-col bg-slate-950/95 backdrop-blur-xl border border-slate-800 rounded-2xl shadow-2xl shadow-black/50 animate-page-enter overflow-hidden transition-all duration-300 ${isMinimized ? 'h-auto' : 'h-[520px]'}`}>
                     {/* Header */}
                     <div className="flex items-center justify-between px-5 py-4 border-b border-slate-800 bg-slate-900/80">
                         <div className="flex items-center gap-3">
@@ -152,67 +153,80 @@ const ChatWidget: React.FC = () => {
                                 <p className="text-xs text-emerald-400">Online</p>
                             </div>
                         </div>
-                        <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors p-1">
-                            <X className="w-5 h-5" />
-                        </button>
+                        <div className="flex items-center gap-2">
+                            <button
+                                onClick={() => setIsMinimized(!isMinimized)}
+                                title={isMinimized ? 'Expand chat' : 'Minimize chat'}
+                                className="text-slate-400 hover:text-white transition-colors p-1"
+                            >
+                                {isMinimized ? <Maximize2 className="w-4 h-4" /> : <Minus className="w-4 h-4" />}
+                            </button>
+                            <button onClick={() => setIsOpen(false)} className="text-slate-400 hover:text-white transition-colors p-1">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
 
-                    {/* Messages */}
-                    <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-                        {messages.map((msg, i) => (
-                            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                                <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
+                    {/* Messages — hidden when minimized */}
+                    {!isMinimized && (
+                        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+                            {messages.map((msg, i) => (
+                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${msg.role === 'user'
                                         ? 'bg-indigo-600 text-white rounded-br-md'
                                         : 'bg-slate-800 text-slate-200 rounded-bl-md'
-                                    }`}>
-                                    {msg.text}
+                                        }`}>
+                                        {msg.text}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
-                        {loading && (
-                            <div className="flex justify-start">
-                                <div className="bg-slate-800 text-slate-400 px-4 py-2.5 rounded-2xl rounded-bl-md text-sm">
-                                    <Loader2 className="w-4 h-4 animate-spin" />
+                            ))}
+                            {loading && (
+                                <div className="flex justify-start">
+                                    <div className="bg-slate-800 text-slate-400 px-4 py-2.5 rounded-2xl rounded-bl-md text-sm">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                    </div>
                                 </div>
-                            </div>
-                        )}
-                        <div ref={messagesEndRef} />
-                    </div>
-
-                    {/* Escalation button */}
-                    {failedExchanges >= 3 && !escalated && (
-                        <div className="px-4 pb-2">
-                            <button
-                                onClick={handleEscalate}
-                                className="w-full flex items-center justify-center gap-2 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl py-2 transition-colors"
-                            >
-                                <AlertCircle className="w-4 h-4" />
-                                Send to Support
-                            </button>
+                            )}
+                            <div ref={messagesEndRef} />
                         </div>
                     )}
 
-                    {/* Input */}
-                    <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/50">
-                        <div className="flex items-center gap-2">
-                            <input
-                                type="text"
-                                placeholder="Ask anything..."
-                                className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
-                                value={input}
-                                onChange={(e) => setInput(e.target.value)}
-                                onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-                                disabled={loading}
-                            />
-                            <button
-                                onClick={handleSend}
-                                disabled={loading || !input.trim()}
-                                className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl flex items-center justify-center text-white transition-colors"
-                            >
-                                <Send className="w-4 h-4" />
-                            </button>
-                        </div>
-                    </div>
+                    {/* Escalation + Input — hidden when minimized */}
+                    {!isMinimized && (
+                        <>
+                            {failedExchanges >= 3 && !escalated && (
+                                <div className="px-4 pb-2">
+                                    <button
+                                        onClick={handleEscalate}
+                                        className="w-full flex items-center justify-center gap-2 text-sm bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-xl py-2 transition-colors"
+                                    >
+                                        <AlertCircle className="w-4 h-4" />
+                                        Send to Support
+                                    </button>
+                                </div>
+                            )}
+                            <div className="px-4 py-3 border-t border-slate-800 bg-slate-900/50">
+                                <div className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Ask anything..."
+                                        className="flex-1 bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 transition-colors"
+                                        value={input}
+                                        onChange={(e) => setInput(e.target.value)}
+                                        onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+                                        disabled={loading}
+                                    />
+                                    <button
+                                        onClick={handleSend}
+                                        disabled={loading || !input.trim()}
+                                        className="w-10 h-10 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 rounded-xl flex items-center justify-center text-white transition-colors"
+                                    >
+                                        <Send className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
                 </div>
             )}
         </>

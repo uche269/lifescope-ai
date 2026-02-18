@@ -22,14 +22,15 @@ import {
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { WeightLog, BodyMeasurement, FoodLog, MealPlanPreferences } from '../types';
 import { analyzeFoodImage, generateMealPlan, improveDietPlan, interpretTestResults, healthChat } from '../services/geminiService';
-import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 
 const Health: React.FC = () => {
     const { user, planInfo } = useAuth();
     const [activeTab, setActiveTab] = useState<'metrics' | 'food' | 'plan' | 'consultant'>('metrics');
     const [loading, setLoading] = useState(false);
-    const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free';
+    // Admins and premium users have full AI access
+    const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free' && !user?.is_admin;
 
     // --- Metrics State ---
     const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -78,40 +79,20 @@ const Health: React.FC = () => {
     const [isConsultLoading, setIsConsultLoading] = useState(false);
     const consultEndRef = useRef<HTMLDivElement>(null);
 
-    // --- Fetch Data from Supabase ---
+    // --- Fetch Data from Backend API ---
     const fetchHealthData = async () => {
         setLoading(true);
         try {
-            // Fetch Weight
-            const { data: wData, error: wError } = await supabase
-                .from('weight_logs')
-                .select('*')
-                .order('date', { ascending: true });
-
-            if (wData) setWeightLogs(wData);
-            if (wError) console.error("Error fetching weight:", wError);
-
-            // Fetch Measurements
-            const { data: mData, error: mError } = await supabase
-                .from('measurements')
-                .select('*')
-                .order('date', { ascending: true });
-
-            if (mData) setMeasurements(mData);
-            if (mError) console.error("Error fetching measurements:", mError);
-
-            // Fetch Food Logs
-            const { data: fData, error: fError } = await supabase
-                .from('food_logs')
-                .select('*')
-                .order('date', { ascending: false })
-                .limit(20); // Limit to last 20 to avoid heavy load if images are stored
-
-            if (fData) setFoodLogs(fData);
-            if (fError) console.error("Error fetching food:", fError);
-
+            const [wData, mData, fData] = await Promise.all([
+                api.get('weight_logs', { orderBy: 'date', ascending: 'true' }),
+                api.get('measurements', { orderBy: 'date', ascending: 'true' }),
+                api.get('food_logs', { orderBy: 'date', limit: '20' })
+            ]);
+            if (Array.isArray(wData)) setWeightLogs(wData);
+            if (Array.isArray(mData)) setMeasurements(mData);
+            if (Array.isArray(fData)) setFoodLogs(fData);
         } catch (error) {
-            console.error("Supabase connection error:", error);
+            console.error('Health data fetch error:', error);
         } finally {
             setLoading(false);
         }
@@ -132,24 +113,17 @@ const Health: React.FC = () => {
         const newLog = {
             date: weightDate,
             weight: parseFloat(newWeight),
-            user_id: user?.id
         };
-
-        // Optimistic update
         const tempId = Date.now().toString();
         const optimisiticLog = { ...newLog, id: tempId };
         setWeightLogs([...weightLogs, optimisiticLog].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
         setNewWeight('');
-
-        const { data, error } = await supabase.from('weight_logs').insert([newLog]).select();
-
-        if (error) {
-            alert("Failed to save weight to Supabase.");
-            // Revert optimistic update
+        try {
+            const saved = await api.post('weight_logs', newLog);
+            setWeightLogs(prev => prev.map(l => l.id === tempId ? saved : l));
+        } catch (e) {
+            alert('Failed to save weight.');
             setWeightLogs(prev => prev.filter(l => l.id !== tempId));
-        } else if (data) {
-            // Replace temp ID with real ID
-            setWeightLogs(prev => prev.map(l => l.id === tempId ? data[0] : l));
         }
     };
 
@@ -164,47 +138,32 @@ const Health: React.FC = () => {
             arm: parseFloat(newMeasurement.arm),
             stomach: parseFloat(newMeasurement.stomach),
             waist: parseFloat(newMeasurement.waist),
-            user_id: user?.id
         };
-
-        // Optimistic update
         const tempId = Date.now().toString();
         const optimisticLog = { ...newLog, id: tempId };
         setMeasurements([...measurements, optimisticLog].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()));
         setNewMeasurement({ arm: '', stomach: '', waist: '' });
-
-        const { data, error } = await supabase.from('measurements').insert([newLog]).select();
-
-        if (error) {
-            alert("Failed to save measurements to Supabase.");
+        try {
+            const saved = await api.post('measurements', newLog);
+            setMeasurements(prev => prev.map(l => l.id === tempId ? saved : l));
+        } catch (e) {
+            alert('Failed to save measurements.');
             setMeasurements(prev => prev.filter(l => l.id !== tempId));
-        } else if (data) {
-            setMeasurements(prev => prev.map(l => l.id === tempId ? data[0] : l));
         }
     };
 
     const deleteWeightLog = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm("Delete this weight entry?")) return;
-
+        if (!confirm('Delete this weight entry?')) return;
         setWeightLogs(prev => prev.filter(l => l.id !== id));
-        const { error } = await supabase.from('weight_logs').delete().eq('id', id);
-        if (error) {
-            console.error("Error deleting weight:", error);
-            fetchHealthData(); // Revert on error
-        }
+        try { await api.delete('weight_logs', id); } catch { fetchHealthData(); }
     };
 
     const deleteMeasurement = async (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
-        if (!confirm("Delete this measurement entry?")) return;
-
+        if (!confirm('Delete this measurement entry?')) return;
         setMeasurements(prev => prev.filter(m => m.id !== id));
-        const { error } = await supabase.from('measurements').delete().eq('id', id);
-        if (error) {
-            console.error("Error deleting measurement:", error);
-            fetchHealthData(); // Revert on error
-        }
+        try { await api.delete('measurements', id); } catch { fetchHealthData(); }
     };
 
     // --- Handlers: Camera & Food ---
@@ -231,19 +190,13 @@ const Health: React.FC = () => {
         setShowCamera(false);
     };
 
-    const saveFoodLogToSupabase = async (logData: any) => {
-        // We'll store the image data directly in the table for simplicity as per requirements, 
-        // but in production, Storage Buckets should be used.
-        const { data, error } = await supabase.from('food_logs').insert([{
-            ...logData,
-            user_id: user?.id
-        }]).select();
-
-        if (error) {
-            console.error("Supabase Save Error", error);
-            alert("Failed to save food log.");
-        } else if (data) {
-            setFoodLogs([data[0], ...foodLogs]);
+    const saveFoodLog = async (logData: any) => {
+        try {
+            const saved = await api.post('food_logs', logData);
+            setFoodLogs(prev => [saved, ...prev]);
+        } catch (e) {
+            console.error('Food log save error', e);
+            alert('Failed to save food log.');
         }
     };
 
@@ -273,7 +226,7 @@ const Health: React.FC = () => {
                         fat: result.fat,
                         image: dataUrl // Saving base64 string
                     };
-                    await saveFoodLogToSupabase(logData);
+                    await saveFoodLog(logData);
                 } else {
                     alert("Could not analyze food.");
                 }
@@ -303,7 +256,7 @@ const Health: React.FC = () => {
                     fat: result.fat,
                     image: reader.result as string
                 };
-                await saveFoodLogToSupabase(logData);
+                await saveFoodLog(logData);
             } else {
                 alert("Could not analyze food. Please check your API key.");
             }
