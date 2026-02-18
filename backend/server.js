@@ -444,6 +444,35 @@ const ensureAdmin = async (req, res, next) => {
     next();
 };
 
+// Data Migration Endpoint (Legacy Recovery)
+app.post('/api/auth/migrate-legacy-data', ensureAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const tables = ['goals', 'finance_transactions', 'finance_budgets', 'health_test_results', 'weight_logs', 'food_logs', 'chat_logs'];
+        const results = {};
+
+        for (const table of tables) {
+            // Reassign records where user_id is NOT in the users table (orphaned)
+            const query = `
+                UPDATE public."${table}" 
+                SET user_id = $1 
+                WHERE user_id NOT IN (SELECT id FROM public.users)
+            `;
+            const { rowCount } = await pool.query(query, [userId]);
+            results[table] = rowCount;
+        }
+
+        // Special case for activities (linked via goals, so usually done if goals are moved?)
+        // Activities don't have user_id, they have goal_id. 
+        // If goals are moved, activities move with them.
+
+        res.json({ success: true, migrated: results });
+    } catch (err) {
+        console.error("Migration error:", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // Health Check
 app.get('/api/health', async (req, res) => {
     try {

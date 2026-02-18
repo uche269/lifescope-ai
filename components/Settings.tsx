@@ -4,6 +4,7 @@ import {
     Sun, Moon, LogOut, Trash2, Sparkles, Bell, Mail, Save
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { api } from '../services/api';
 import { useTheme } from '../contexts/ThemeContext';
 
 const Settings: React.FC = () => {
@@ -37,6 +38,17 @@ const Settings: React.FC = () => {
         localStorage.setItem('ls_notifications', JSON.stringify(notifications));
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
+    };
+
+    const handleMigrate = async () => {
+        if (!confirm("This will attempt to recover data linked to previous versions of your account. Continue?")) return;
+        try {
+            const res = await api.post('auth/migrate-legacy-data', {});
+            alert(`Migration Complete!\nRecovered:\n` + JSON.stringify(res.migrated, null, 2));
+            window.location.reload();
+        } catch (e: any) {
+            alert("Migration failed: " + e.message);
+        }
     };
 
     const sections = [
@@ -311,58 +323,79 @@ const Settings: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Danger Zone */}
-                            <div className="glass-panel rounded-2xl p-8 border-red-500/20">
-                                <h4 className="text-sm font-bold text-red-400 mb-4">Danger Zone</h4>
-                                <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
-                                    <div className="flex items-start justify-between gap-4">
-                                        <div>
-                                            <p className="text-sm font-medium text-white">Delete Account</p>
-                                            <p className="text-xs text-slate-500 mt-1">
-                                                Permanently delete your account and all associated data. This action cannot be undone.
-                                            </p>
-                                        </div>
-                                        {!showDeleteConfirm ? (
-                                            <button
-                                                onClick={() => setShowDeleteConfirm(true)}
-                                                className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
-                                            >
-                                                <Trash2 className="w-4 h-4" /> Delete
-                                            </button>
-                                        ) : (
-                                            <div className="flex flex-col gap-2 items-end">
-                                                <input
-                                                    type="text"
-                                                    placeholder="Type DELETE to confirm"
-                                                    value={deleteInput}
-                                                    onChange={e => setDeleteInput(e.target.value)}
-                                                    className="bg-slate-900 border border-red-500/30 rounded-lg px-3 py-2 text-sm text-white w-48 focus:outline-none"
-                                                />
-                                                <div className="flex gap-2">
-                                                    <button
-                                                        onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}
-                                                        className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
-                                                    >
-                                                        Cancel
-                                                    </button>
-                                                    <button
-                                                        disabled={deleteInput !== 'DELETE'}
-                                                        className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-30 text-white rounded-lg text-xs font-medium transition-colors"
-                                                    >
-                                                        Confirm Delete
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        )}
+                                {/* Legacy Migration */}
+                    <div className="bg-slate-900 rounded-xl p-5 border border-indigo-500/30">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <p className="text-sm font-medium text-white flex items-center gap-2">
+                                    <Sparkles className="w-4 h-4 text-indigo-400" />
+                                    Recover Legacy Data
+                                </p>
+                                <p className="text-xs text-slate-500 mt-1">If you can't see your data after the update, click here.</p>
+                            </div>
+                            <button
+                                onClick={handleMigrate}
+                                className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium transition-colors"
+                            >
+                                Recover Data
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Danger Zone */}
+                <div className="glass-panel rounded-2xl p-8 border-red-500/20">
+                    <h4 className="text-sm font-bold text-red-400 mb-4">Danger Zone</h4>
+                    <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <p className="text-sm font-medium text-white">Delete Account</p>
+                                <p className="text-xs text-slate-500 mt-1">
+                                    Permanently delete your account and all associated data. This action cannot be undone.
+                                </p>
+                            </div>
+                            {!showDeleteConfirm ? (
+                                <button
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    className="flex items-center gap-2 px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg text-sm font-medium transition-colors whitespace-nowrap"
+                                >
+                                    <Trash2 className="w-4 h-4" /> Delete
+                                </button>
+                            ) : (
+                                <div className="flex flex-col gap-2 items-end">
+                                    <input
+                                        type="text"
+                                        placeholder="Type DELETE to confirm"
+                                        value={deleteInput}
+                                        onChange={e => setDeleteInput(e.target.value)}
+                                        className="bg-slate-900 border border-red-500/30 rounded-lg px-3 py-2 text-sm text-white w-48 focus:outline-none"
+                                    />
+                                    <div className="flex gap-2">
+                                        <button
+                                            onClick={() => { setShowDeleteConfirm(false); setDeleteInput(''); }}
+                                            className="px-3 py-1.5 text-xs text-slate-400 hover:text-white"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            disabled={deleteInput !== 'DELETE'}
+                                            className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-30 text-white rounded-lg text-xs font-medium transition-colors"
+                                        >
+                                            Confirm Delete
+                                        </button>
                                     </div>
                                 </div>
-                            </div>
+                            )}
                         </div>
-                    )}
+                    </div>
                 </div>
             </div>
+                    )}
         </div>
+            </div >
+        </div >
     );
 };
 
