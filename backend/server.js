@@ -12,7 +12,9 @@ import { createTransport } from 'nodemailer';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { readFileSync } from 'fs';
-import pdfParse from 'pdf-parse/lib/pdf-parse.js';
+import { createRequire } from 'module';
+const require = createRequire(import.meta.url);
+const pdfParse = require('pdf-parse');
 
 dotenv.config();
 
