@@ -1,13 +1,11 @@
 # Stage 1: Build Frontend
-FROM node:20-alpine as frontend-build
+FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY package*.json ./
 RUN npm ci
 COPY . .
 # Pass env vars as build args so Vite bakes them into the bundle
-ARG VITE_GEMINI_API_KEY
 ARG VITE_API_URL
-ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
 ENV VITE_API_URL=$VITE_API_URL
 # Build Vite app to /app/frontend/dist
 RUN npm run build
@@ -23,6 +21,9 @@ RUN npm install --omit=dev
 
 # Copy backend source code
 COPY backend/ ./
+
+# Create uploads directory for multer
+RUN mkdir -p uploads
 
 # Copy built frontend assets from Stage 1
 COPY --from=frontend-build /app/frontend/dist ../dist

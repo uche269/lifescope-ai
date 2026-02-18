@@ -2,7 +2,7 @@
 set -e
 
 # Configuration
-REPO_URL="git@github.com:uche269/lifescope-ai.git"
+REPO_URL="https://github.com/Start-End-2025/lifescope-ai.git"
 APP_DIR="/opt/lifescope"
 
 echo "=== deployment started ==="
@@ -37,12 +37,23 @@ if [ ! -f .env ]; then
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgresql://lifescope_user:Nuujj78rfw@76.13.48.189:5432/lifescope
-# Add your Google Auth keys here
+FRONTEND_URL=http://76.13.48.189
+VITE_API_URL=http://76.13.48.189/api
+
+# Auth Secrets - REPLACE THESE!
 GOOGLE_CLIENT_ID=
 GOOGLE_CLIENT_SECRET=
 SESSION_SECRET=$(openssl rand -hex 32)
+
+# AI Configuration
+GEMINI_API_KEY=
+
+# Email Configuration (Optional - for Chat Escalation)
+SMTP_EMAIL=
+SMTP_PASSWORD=
+ADMIN_EMAIL=
 EOT
-    echo "⚠️  CREATED .env FILE. PLEASE EDIT IT NOW TO ADD GOOGLE KEYS!"
+    echo "⚠️  CREATED .env FILE. PLEASE EDIT IT NOW TO ADD GOOGLE KEYS & GEMINI KEY!"
     echo "Run: nano .env"
     exit 0
 fi

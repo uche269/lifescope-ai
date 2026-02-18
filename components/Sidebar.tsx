@@ -2,12 +2,12 @@ import React from 'react';
 import {
   LayoutDashboard,
   Target,
-  BrainCircuit,
-  Newspaper,
+  Wallet,
+  HeartPulse,
   FileText,
   Settings,
-  HeartPulse,
-  X // Import X for close button
+  BrainCircuit,
+  X
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
@@ -20,11 +20,10 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'goals', label: 'Goals & Projects', icon: Target },
-    { id: 'health', label: 'Health & Nutrition', icon: HeartPulse },
-    { id: 'selfdev', label: 'Self Development', icon: BrainCircuit },
-    { id: 'knowledge', label: 'Knowledge Hub', icon: Newspaper },
-    { id: 'docs', label: 'Doc Intelligence', icon: FileText },
+    { id: 'goals', label: 'Goals', icon: Target },
+    { id: 'finance', label: 'Finance Manager', icon: Wallet },
+    { id: 'health', label: 'Health & Wellness', icon: HeartPulse },
+    { id: 'docs', label: 'Document Tools', icon: FileText },
   ];
 
   return (

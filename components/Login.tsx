@@ -5,7 +5,7 @@ import { BrainCircuit, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2 } from 
 const Login: React.FC = () => {
     const { signInWithGoogle, signInWithMagicLink } = useAuth();
     const [error, setError] = useState<string | null>(null);
-    const [email, setEmail] = useState('uchechukwunnorom2004@gmail.com');
+    const [email, setEmail] = useState('');
     const [magicLinkSent, setMagicLinkSent] = useState(false);
     const [loading, setLoading] = useState(false);
 
@@ -91,7 +91,7 @@ const Login: React.FC = () => {
                                     required
                                     value={email}
                                     onChange={(e) => setEmail(e.target.value)}
-                                    placeholder="Authorized Email Only"
+                                    placeholder="Enter your email"
                                     className="w-full bg-slate-900/50 border border-slate-700 rounded-xl py-3 pl-10 pr-4 text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                                 />
                             </div>
@@ -107,7 +107,7 @@ const Login: React.FC = () => {
 
                         <div className="flex items-center justify-center gap-2 text-xs text-slate-500 mt-6">
                             <Lock className="w-3 h-3" />
-                            <span>Restricted Access: Authorized Personnel Only</span>
+                            <span>Free 7-day trial · No credit card required</span>
                         </div>
                     </div>
                 )}

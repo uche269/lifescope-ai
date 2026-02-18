@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="dark-theme">
 
 <head>
   <meta charset="UTF-8" />
@@ -242,6 +242,139 @@
     /* === Custom Date Input === */
     .custom-date-icon::-webkit-calendar-picker-indicator {
       filter: invert(0.6) brightness(1.2);
+    }
+
+    /* ========================================
+       LIGHT THEME OVERRIDES
+       ======================================== */
+    .light-theme body {
+      background-color: #f1f5f9;
+      color: #1e293b;
+    }
+
+    .light-theme #root::before {
+      background:
+        radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.06) 0%, transparent 50%),
+        radial-gradient(ellipse at 80% 20%, rgba(139, 92, 246, 0.04) 0%, transparent 50%),
+        radial-gradient(ellipse at 60% 80%, rgba(59, 130, 246, 0.03) 0%, transparent 50%);
+    }
+
+    .light-theme .glass-panel {
+      background: rgba(255, 255, 255, 0.75);
+      backdrop-filter: blur(16px) saturate(1.2);
+      -webkit-backdrop-filter: blur(16px) saturate(1.2);
+      border: 1px solid rgba(0, 0, 0, 0.08);
+      box-shadow:
+        0 2px 12px rgba(0, 0, 0, 0.06),
+        inset 0 1px 0 rgba(255, 255, 255, 0.6);
+    }
+
+    .light-theme .glass-panel:hover {
+      box-shadow:
+        0 4px 20px rgba(0, 0, 0, 0.08),
+        0 0 16px rgba(99, 102, 241, 0.08),
+        inset 0 1px 0 rgba(255, 255, 255, 0.8);
+      border-color: rgba(99, 102, 241, 0.15);
+    }
+
+    .light-theme .glow-text {
+      background: linear-gradient(135deg, #4f46e5, #6366f1, #7c3aed);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      filter: none;
+    }
+
+    .light-theme .stat-number {
+      background: linear-gradient(135deg, #1e293b, #334155);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .light-theme .nav-active::after {
+      box-shadow: 0 0 8px rgba(99, 102, 241, 0.3);
+    }
+
+    .light-theme ::-webkit-scrollbar-thumb {
+      background: rgba(99, 102, 241, 0.15);
+    }
+
+    .light-theme ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.3);
+    }
+
+    /* Light theme Tailwind-class overrides via utility classes */
+    .light-theme .bg-slate-950 {
+      background-color: #f1f5f9 !important;
+    }
+
+    .light-theme .bg-slate-900 {
+      background-color: #f8fafc !important;
+    }
+
+    .light-theme .bg-slate-900\/80 {
+      background-color: rgba(248, 250, 252, 0.8) !important;
+    }
+
+    .light-theme .bg-slate-900\/50 {
+      background-color: rgba(248, 250, 252, 0.5) !important;
+    }
+
+    .light-theme .bg-slate-800 {
+      background-color: #e2e8f0 !important;
+    }
+
+    .light-theme .bg-slate-800\/80 {
+      background-color: rgba(226, 232, 240, 0.8) !important;
+    }
+
+    .light-theme .bg-slate-800\/50 {
+      background-color: rgba(226, 232, 240, 0.5) !important;
+    }
+
+    .light-theme .text-white {
+      color: #1e293b !important;
+    }
+
+    .light-theme .text-slate-300 {
+      color: #475569 !important;
+    }
+
+    .light-theme .text-slate-400 {
+      color: #64748b !important;
+    }
+
+    .light-theme .text-slate-500 {
+      color: #94a3b8 !important;
+    }
+
+    .light-theme .text-slate-600 {
+      color: #94a3b8 !important;
+    }
+
+    .light-theme .border-slate-700 {
+      border-color: #cbd5e1 !important;
+    }
+
+    .light-theme .border-slate-800 {
+      border-color: #e2e8f0 !important;
+    }
+
+    .light-theme .border-slate-800\/50 {
+      border-color: rgba(226, 232, 240, 0.5) !important;
+    }
+
+    .light-theme .hover\:bg-slate-900\/50:hover {
+      background-color: rgba(241, 245, 249, 0.5) !important;
+    }
+
+    .light-theme .placeholder-slate-500::placeholder {
+      color: #94a3b8 !important;
+    }
+
+    .light-theme .custom-date-icon::-webkit-calendar-picker-indicator {
+      filter: none;
     }
   </style>
 </head>

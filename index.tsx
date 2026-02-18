@@ -8,6 +8,7 @@ if (!rootElement) {
 }
 
 import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
 import ErrorBoundary from './components/ErrorBoundary';
 
@@ -18,9 +19,11 @@ const root = ReactDOM.createRoot(rootElement);
 root.render(
   <ErrorBoundary>
     <BrowserRouter>
-      <AuthProvider>
-        <App />
-      </AuthProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <App />
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   </ErrorBoundary>
 );

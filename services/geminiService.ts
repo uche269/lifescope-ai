@@ -384,3 +384,189 @@ export const improveDietPlan = async (currentPlan: string, goal: string) => {
     return null;
   }
 }
+
+// --- Chat Support Service ---
+
+export const chatWithSupport = async (
+  message: string,
+  userContext: { userName: string; plan: string; trialActive: boolean; trialDaysLeft: number },
+  chatHistory: { role: string; text: string }[]
+) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.0-flash';
+
+    const historyFormatted = chatHistory.slice(-6).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.text }]
+    }));
+
+    const systemPrompt = `You are the LifeScope AI assistant. You help users navigate the LifeScope app and answer questions about their data and features.
+
+User Info: Name is ${userContext.userName}, Plan: ${userContext.plan}, Trial Active: ${userContext.trialActive}, Trial Days Left: ${userContext.trialDaysLeft}.
+
+App Features:
+- Dashboard: Overview of goals and progress
+- Goals: Create and track personal goals with activities
+- Finance Manager: Upload bank statements (CSV), view spending charts, AI budget analysis
+- Health & Wellness: Weight tracking, food logging, meal plans, health consultant
+- Document Tools: PDF signing, annotation, merging, AI summarization
+- Settings: Profile, plan management, account deletion
+
+Keep responses concise and helpful. Do not use markdown formatting. If you cannot help with an issue, suggest the user clicks "Send to Support" to escalate.`;
+
+    const chat = ai.chats.create({
+      model,
+      history: historyFormatted,
+      config: {
+        systemInstruction: systemPrompt
+      }
+    });
+
+    const result = await chat.sendMessage({ message });
+    return result.text || "I'm not sure about that. Would you like me to send your question to our support team?";
+  } catch (error) {
+    console.error("Chat Support Error:", error);
+    throw error;
+  }
+}
+
+// --- Health Consultant Services ---
+
+export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.0-flash';
+
+    const prompt = `
+      Interpret these medical test results in plain language:
+      
+      Test Type: ${testData.testType}
+      Results: ${JSON.stringify(testData.results)}
+      
+      For each value:
+      1. Explain what it measures
+      2. Whether the value is normal, low, or high
+      3. What this means for the patient's health
+      4. Simple lifestyle recommendations if values are abnormal
+      
+      Use plain language a non-medical person can understand.
+      Do NOT use markdown formatting.
+      Write in clear paragraphs.
+    `;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: prompt,
+      config: {
+        systemInstruction: "You are a health information assistant. Explain test results clearly. Always include the disclaimer at the end."
+      }
+    });
+
+    const disclaimer = "\n\nDISCLAIMER: This is not medical advice. The information provided is for educational purposes only. Always consult a qualified healthcare provider for medical decisions.";
+    return (response.text || "Unable to interpret results.") + disclaimer;
+  } catch (error) {
+    console.error("Test Interpretation Error:", error);
+    return "Error interpreting test results. Please try again.";
+  }
+}
+
+export const healthChat = async (
+  message: string,
+  healthContext: {
+    weightLogs?: any[];
+    foodLogs?: any[];
+    measurements?: any[];
+    testResults?: any[];
+  },
+  chatHistory: { role: string; text: string }[]
+) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.0-flash';
+
+    const contextSummary = [];
+    if (healthContext.weightLogs?.length) {
+      const latest = healthContext.weightLogs[0];
+      contextSummary.push(`Latest weight: ${latest.weight_kg}kg on ${latest.date}`);
+    }
+    if (healthContext.measurements?.length) {
+      const latest = healthContext.measurements[0];
+      contextSummary.push(`Latest measurements: Arm ${latest.arm_cm}cm, Waist ${latest.waist_cm}cm`);
+    }
+    if (healthContext.testResults?.length) {
+      contextSummary.push(`Recent test: ${healthContext.testResults[0].test_type} on ${healthContext.testResults[0].test_date}`);
+    }
+
+    const historyFormatted = chatHistory.slice(-6).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.text }]
+    }));
+
+    const systemPrompt = `You are a health and wellness consultant within the LifeScope app. You have access to the user's health data:
+${contextSummary.join('\n')}
+
+Provide helpful health guidance based on their data. Be supportive and encouraging.
+Do NOT use markdown formatting.
+ALWAYS end your response with this disclaimer on a new line:
+"Note: This is not medical advice. Please consult a healthcare professional for medical decisions."`;
+
+    const chat = ai.chats.create({
+      model,
+      history: historyFormatted,
+      config: {
+        systemInstruction: systemPrompt
+      }
+    });
+
+    const result = await chat.sendMessage({ message });
+    return result.text || "I'm not sure about that. Please consult a healthcare professional.";
+  } catch (error) {
+    console.error("Health Chat Error:", error);
+    return "Error processing your health question. Please try again.";
+  }
+}
+
+export const chatWithDocument = async (
+  message: string,
+  documentText: string,
+  chatHistory: { role: string; text: string }[]
+) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.0-flash';
+
+    // Truncate document text to avoid token limits
+    const truncatedDoc = documentText.slice(0, 30000);
+
+    const historyFormatted = chatHistory.slice(-8).map(m => ({
+      role: m.role === 'user' ? 'user' : 'model',
+      parts: [{ text: m.text }]
+    }));
+
+    const systemPrompt = `You are a document analysis assistant. The user has uploaded a document and wants to ask questions about it.
+
+DOCUMENT CONTENT:
+---
+${truncatedDoc}
+---
+
+Answer the user's questions based ONLY on the document content above. If the answer is not in the document, say so clearly.
+Be concise and helpful. Do not use markdown formatting.
+If the user asks you to summarize, extract data, find specific information, or explain sections, do so based on the document.`;
+
+    const chat = ai.chats.create({
+      model,
+      history: historyFormatted,
+      config: {
+        systemInstruction: systemPrompt
+      }
+    });
+
+    const result = await chat.sendMessage({ message });
+    return result.text || "I couldn't process that question. Please try again.";
+  } catch (error) {
+    console.error("Document Chat Error:", error);
+    throw error;
+  }
+}

@@ -34,6 +34,13 @@ CREATE TABLE public.users (
     email TEXT UNIQUE NOT NULL,
     full_name TEXT,
     avatar_url TEXT,
+    google_id TEXT,
+    plan TEXT DEFAULT 'free',
+    trial_ends_at TIMESTAMP WITH TIME ZONE,
+    ai_calls_today INT DEFAULT 0,
+    ai_calls_reset_at DATE DEFAULT CURRENT_DATE,
+    is_admin BOOLEAN DEFAULT false,
+    last_login TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 

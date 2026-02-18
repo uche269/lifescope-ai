@@ -3,11 +3,12 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import Sidebar from './components/Sidebar';
 import Dashboard from './components/Dashboard';
 import Goals from './components/Goals';
-import SelfDevelopment from './components/SelfDevelopment';
-import Knowledge from './components/Knowledge';
-import Documents from './components/Documents';
+import FinanceManager from './components/FinanceManager';
+import DocumentTools from './components/DocumentTools';
 import Settings from './components/Settings';
 import Health from './components/Health';
+import ChatWidget from './components/ChatWidget';
+import NotificationBanner from './components/NotificationBanner';
 import { Goal, GoalCategory, Activity } from './types';
 
 import Login from './components/Login';
@@ -192,21 +193,21 @@ const MainApp: React.FC = () => {
 
       <main className="md:pl-64 min-h-screen transition-all duration-300">
         <div className="max-w-7xl mx-auto p-4 md:p-8 pt-6 md:pt-10">
+          <NotificationBanner goals={goals} />
           <Routes>
             <Route path="/" element={<Dashboard goals={goals} />} />
             <Route path="/dashboard" element={<Navigate to="/" replace />} />
             <Route path="/goals" element={<Goals goals={goals} setGoals={setGoals} />} />
+            <Route path="/finance" element={<FinanceManager />} />
             <Route path="/health" element={<Health />} />
-            <Route path="/selfdev" element={<SelfDevelopment />} />
-            <Route path="/knowledge" element={<Knowledge />} />
-            <Route path="/docs" element={<Documents />} />
+            <Route path="/docs" element={<DocumentTools />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
 
           <footer className="mt-12 border-t border-slate-900 pt-6 text-center text-slate-600 text-sm">
             <p className="mb-2">What do you want to add, review, or improve today?</p>
-            <p className="text-xs opacity-50">LifeScope AI v1.0 • Built with Gemini</p>
+            <p className="text-xs opacity-50">LifeScope AI v2.0 • Built with Gemini</p>
           </footer>
         </div>
       </main>
@@ -216,6 +217,9 @@ const MainApp: React.FC = () => {
         <div className="absolute top-[-10%] left-[20%] w-[500px] h-[500px] bg-indigo-900/10 rounded-full blur-[100px]"></div>
         <div className="absolute bottom-[-10%] right-[10%] w-[600px] h-[600px] bg-blue-900/10 rounded-full blur-[120px]"></div>
       </div>
+
+      {/* Floating Chat Widget */}
+      <ChatWidget />
 
       {/* Debug Panel */}
       <Diagnostics goals={goals} />

@@ -1,38 +1,63 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../lib/supabase';
-import { User, Session } from '@supabase/supabase-js';
+
+interface UserPlanInfo {
+  effectivePlan: 'free' | 'pro' | 'premium';
+  aiCallsRemaining: number;
+  aiCallsLimit: number;
+  trialActive: boolean;
+  trialDaysLeft: number;
+  is_admin: boolean;
+}
 
 interface AuthContextType {
-  user: User | null;
+  user: any | null;
+  planInfo: UserPlanInfo | null;
   loading: boolean;
   signOut: () => Promise<void>;
   signInWithGoogle: () => Promise<{ error: any }>;
   signInWithMagicLink: (email: string) => Promise<{ error: any }>;
+  refreshUser: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   user: null,
+  planInfo: null,
   loading: true,
   signOut: async () => { },
   signInWithGoogle: async () => ({ error: null }),
-  signInWithMagicLink: async () => ({ error: null })
+  signInWithMagicLink: async () => ({ error: null }),
+  refreshUser: async () => { }
 });
 
-const ALLOWED_EMAIL = 'uchechukwunnorom2004@gmail.com';
-
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<any | null>(null);
+  const [planInfo, setPlanInfo] = useState<UserPlanInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkUser = async (session: Session | null) => {
+  const checkUser = async (session: any | null) => {
     const currentUser = session?.user;
     if (currentUser) {
-      // Backend now handles whitelist check, so we trust the session.
       setUser(currentUser);
+      // Extract plan info from the user object
+      setPlanInfo({
+        effectivePlan: currentUser.effectivePlan || 'free',
+        aiCallsRemaining: currentUser.aiCallsRemaining ?? 0,
+        aiCallsLimit: currentUser.aiCallsLimit ?? 0,
+        trialActive: currentUser.trialActive ?? false,
+        trialDaysLeft: currentUser.trialDaysLeft ?? 0,
+        is_admin: currentUser.is_admin ?? false
+      });
     } else {
       setUser(null);
+      setPlanInfo(null);
     }
     setLoading(false);
+  };
+
+  const refreshUser = async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    await checkUser(session);
   };
 
   useEffect(() => {
@@ -51,6 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signOut = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setPlanInfo(null);
   };
 
   const signInWithGoogle = async () => {
@@ -64,9 +90,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const signInWithMagicLink = async (email: string) => {
-    if (email !== ALLOWED_EMAIL) {
-      return { error: { message: "Access Denied: This email is not authorized." } };
-    }
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
@@ -77,7 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signOut, signInWithGoogle, signInWithMagicLink }}>
+    <AuthContext.Provider value={{ user, planInfo, loading, signOut, signInWithGoogle, signInWithMagicLink, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

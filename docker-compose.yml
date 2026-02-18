@@ -3,7 +3,6 @@ services:
     build:
       context: .
       args:
-        - VITE_GEMINI_API_KEY=${VITE_GEMINI_API_KEY}
         - VITE_API_URL=${VITE_API_URL}
     restart: always
     ports:
@@ -11,10 +10,17 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
-      - DATABASE_URL=postgresql://lifescope_user:Nuujj78rfw@76.13.48.189:5432/lifescope
+      - DATABASE_URL=${DATABASE_URL}
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - SESSION_SECRET=${SESSION_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - FRONTEND_URL=${FRONTEND_URL}
+      - ADMIN_EMAIL=${ADMIN_EMAIL:-}
+      - SMTP_EMAIL=${SMTP_EMAIL:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+    volumes:
+      - uploads:/app/backend/uploads
     depends_on:
       - db
 
@@ -24,9 +30,12 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
     environment:
-      - POSTGRES_USER=lifescope
-      - POSTGRES_PASSWORD=secure_password_123
-      - POSTGRES_DB=lifescope
+      - POSTGRES_USER=${DB_USER:-lifescope}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+      - POSTGRES_DB=${DB_NAME:-lifescope}
+    ports:
+      - "5432:5432"
 
 volumes:
   db_data:
+  uploads:

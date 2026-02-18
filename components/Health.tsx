@@ -13,18 +13,23 @@ import {
     Save,
     X,
     Check,
-    RefreshCw
+    RefreshCw,
+    Stethoscope,
+    Send,
+    Loader2,
+    Trash2
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { WeightLog, BodyMeasurement, FoodLog, MealPlanPreferences } from '../types';
-import { analyzeFoodImage, generateMealPlan, improveDietPlan } from '../services/geminiService';
+import { analyzeFoodImage, generateMealPlan, improveDietPlan, interpretTestResults, healthChat } from '../services/geminiService';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
 
 const Health: React.FC = () => {
-    const { user } = useAuth();
-    const [activeTab, setActiveTab] = useState<'metrics' | 'food' | 'plan'>('metrics');
+    const { user, planInfo } = useAuth();
+    const [activeTab, setActiveTab] = useState<'metrics' | 'food' | 'plan' | 'consultant'>('metrics');
     const [loading, setLoading] = useState(false);
+    const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free';
 
     // --- Metrics State ---
     const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -60,6 +65,18 @@ const Health: React.FC = () => {
         caloriesPerDay: '2000',
         allergies: ''
     });
+
+    // --- Health Consultant State ---
+    const [testType, setTestType] = useState('Blood Test');
+    const [testDate, setTestDate] = useState(new Date().toISOString().split('T')[0]);
+    const [testFields, setTestFields] = useState<{ key: string; value: string }[]>([{ key: '', value: '' }]);
+    const [testInterpretation, setTestInterpretation] = useState<string | null>(null);
+    const [savedTests, setSavedTests] = useState<any[]>([]);
+    const [isInterpreting, setIsInterpreting] = useState(false);
+    const [consultMessages, setConsultMessages] = useState<{ role: string; text: string }[]>([]);
+    const [consultInput, setConsultInput] = useState('');
+    const [isConsultLoading, setIsConsultLoading] = useState(false);
+    const consultEndRef = useRef<HTMLDivElement>(null);
 
     // --- Fetch Data from Supabase ---
     const fetchHealthData = async () => {
@@ -102,6 +119,7 @@ const Health: React.FC = () => {
 
     useEffect(() => {
         fetchHealthData();
+        fetchTestResults();
     }, []);
 
     // Save meal plan locally still as it's a draft usually
@@ -319,6 +337,75 @@ const Health: React.FC = () => {
         }
     };
 
+    // --- Health Consultant Handlers ---
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
+
+    const fetchTestResults = async () => {
+        try {
+            const res = await fetch(`${API_URL}/api/health/test-results`, { credentials: 'include' });
+            const data = await res.json();
+            if (data.data) setSavedTests(data.data);
+        } catch (err) {
+            console.error('Error fetching test results:', err);
+        }
+    };
+
+    const addTestField = () => setTestFields([...testFields, { key: '', value: '' }]);
+    const removeTestField = (i: number) => setTestFields(testFields.filter((_, idx) => idx !== i));
+    const updateTestField = (i: number, field: 'key' | 'value', val: string) => {
+        const updated = [...testFields];
+        updated[i][field] = val;
+        setTestFields(updated);
+    };
+
+    const handleInterpretTest = async () => {
+        if (isAILocked) return;
+        const results: Record<string, any> = {};
+        testFields.forEach(f => { if (f.key && f.value) results[f.key] = f.value; });
+        if (Object.keys(results).length === 0) return;
+
+        setIsInterpreting(true);
+        try {
+            const interpretation = await interpretTestResults({ testType, results });
+            setTestInterpretation(interpretation);
+
+            // Save to backend
+            await fetch(`${API_URL}/api/health/test-results`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
+                body: JSON.stringify({ test_date: testDate, test_type: testType, results, ai_interpretation: interpretation })
+            });
+            fetchTestResults();
+        } catch (err) {
+            setTestInterpretation('Error interpreting results. Please try again.');
+        } finally {
+            setIsInterpreting(false);
+        }
+    };
+
+    const handleConsultSend = async () => {
+        if (!consultInput.trim() || isAILocked) return;
+        const userMsg = { role: 'user', text: consultInput.trim() };
+        setConsultMessages(prev => [...prev, userMsg]);
+        setConsultInput('');
+        setIsConsultLoading(true);
+
+        try {
+            const response = await healthChat(
+                userMsg.text,
+                { weightLogs, foodLogs, measurements, testResults: savedTests },
+                consultMessages
+            );
+            setConsultMessages(prev => [...prev, { role: 'assistant', text: response || 'I could not process that. Please try again.' }]);
+        } catch (err) {
+            setConsultMessages(prev => [...prev, { role: 'assistant', text: 'Error connecting to AI. Please try again.' }]);
+        } finally {
+            setIsConsultLoading(false);
+            setTimeout(() => consultEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+    };
+
     // Chart Data Preparation
     const chartData = weightLogs.map(log => ({
         name: new Date(log.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
@@ -368,6 +455,13 @@ const Health: React.FC = () => {
                     <ChefHat className="w-4 h-4" /> Meal Planner
                     {activeTab === 'plan' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />}
                 </button>
+                <button
+                    onClick={() => setActiveTab('consultant')}
+                    className={`pb-2 px-1 text-sm font-medium transition-colors relative flex items-center gap-2 ${activeTab === 'consultant' ? 'text-indigo-400' : 'text-slate-500 hover:text-slate-300'}`}
+                >
+                    <Stethoscope className="w-4 h-4" /> Health Consultant
+                    {activeTab === 'consultant' && <div className="absolute bottom-0 left-0 w-full h-0.5 bg-indigo-500 shadow-[0_0_8px_rgba(99,102,241,0.8)]" />}
+                </button>
             </div>
 
             {activeTab === 'metrics' && (
@@ -376,8 +470,8 @@ const Health: React.FC = () => {
                         <button
                             onClick={() => setShowHistory(!showHistory)}
                             className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${showHistory
-                                    ? 'bg-indigo-600 text-white'
-                                    : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                                ? 'bg-indigo-600 text-white'
+                                : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
                                 }`}
                         >
                             {showHistory ? <TrendingUp className="w-4 h-4" /> : <CalendarDays className="w-4 h-4" />}
@@ -762,6 +856,141 @@ const Health: React.FC = () => {
                                 </div>
                             </div>
                         )}
+                    </div>
+                </div>
+            )}
+
+            {activeTab === 'consultant' && (
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Test Results Input */}
+                    <div className="glass-panel p-6 rounded-2xl space-y-4">
+                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                            <Stethoscope className="w-5 h-5 text-emerald-400" /> Log Test Results
+                        </h3>
+
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Test Type</label>
+                                <select value={testType} onChange={e => setTestType(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white">
+                                    <option>Blood Test</option>
+                                    <option>Lipid Panel</option>
+                                    <option>Thyroid Panel</option>
+                                    <option>Liver Function</option>
+                                    <option>Kidney Function</option>
+                                    <option>Blood Sugar (Glucose)</option>
+                                    <option>Urinalysis</option>
+                                    <option>Other</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Test Date</label>
+                                <input type="date" value={testDate} onChange={e => setTestDate(e.target.value)}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="block text-xs text-slate-400">Test Values</label>
+                            {testFields.map((f, i) => (
+                                <div key={i} className="flex gap-2">
+                                    <input placeholder="Parameter (e.g. WBC)" value={f.key}
+                                        onChange={e => updateTestField(i, 'key', e.target.value)}
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white" />
+                                    <input placeholder="Value (e.g. 5.2)" value={f.value}
+                                        onChange={e => updateTestField(i, 'value', e.target.value)}
+                                        className="flex-1 bg-slate-900 border border-slate-700 rounded-lg p-2 text-sm text-white" />
+                                    {testFields.length > 1 && (
+                                        <button onClick={() => removeTestField(i)} className="text-slate-500 hover:text-red-400">
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                            <button onClick={addTestField} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1">
+                                <Plus className="w-3 h-3" /> Add field
+                            </button>
+                        </div>
+
+                        <button onClick={handleInterpretTest}
+                            disabled={isInterpreting || isAILocked}
+                            className={`w-full py-3 rounded-xl text-sm font-medium flex items-center justify-center gap-2 transition-colors ${isAILocked ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-indigo-600 hover:bg-indigo-700 text-white'
+                                }`}>
+                            {isInterpreting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                            {isAILocked ? 'Upgrade to Unlock AI' : 'Interpret Results'}
+                        </button>
+
+                        {testInterpretation && (
+                            <div className="bg-slate-900/80 rounded-xl p-4 text-sm text-slate-300 leading-relaxed whitespace-pre-line max-h-[300px] overflow-y-auto custom-scrollbar">
+                                {testInterpretation}
+                            </div>
+                        )}
+
+                        {savedTests.length > 0 && (
+                            <div className="mt-4">
+                                <h4 className="text-xs uppercase text-slate-500 font-bold mb-2">Previous Tests</h4>
+                                <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                                    {savedTests.map(t => (
+                                        <div key={t.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 text-sm">
+                                            <div className="flex justify-between">
+                                                <span className="text-white font-medium">{t.test_type}</span>
+                                                <span className="text-xs text-slate-500">{new Date(t.test_date).toLocaleDateString()}</span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Health Chat */}
+                    <div className="glass-panel p-6 rounded-2xl flex flex-col">
+                        <h3 className="text-lg font-semibold text-white flex items-center gap-2 mb-4">
+                            <Sparkles className="w-5 h-5 text-indigo-400" /> Health Chat
+                        </h3>
+
+                        <div className="flex-1 min-h-[400px] max-h-[500px] overflow-y-auto space-y-3 mb-4 custom-scrollbar">
+                            {consultMessages.length === 0 && (
+                                <div className="text-center py-12 text-slate-600">
+                                    <Stethoscope className="w-10 h-10 mx-auto mb-3 opacity-20" />
+                                    <p className="text-sm">Ask questions about your health data, test results, or general wellness.</p>
+                                    <p className="text-xs mt-2 text-amber-500/60">Not a substitute for professional medical advice.</p>
+                                </div>
+                            )}
+                            {consultMessages.map((msg, i) => (
+                                <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm ${msg.role === 'user'
+                                        ? 'bg-indigo-600 text-white rounded-br-md'
+                                        : 'bg-slate-800 text-slate-300 rounded-bl-md'
+                                        }`}>
+                                        {msg.text}
+                                    </div>
+                                </div>
+                            ))}
+                            {isConsultLoading && (
+                                <div className="flex justify-start">
+                                    <div className="bg-slate-800 rounded-2xl px-4 py-3 text-sm rounded-bl-md">
+                                        <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
+                                    </div>
+                                </div>
+                            )}
+                            <div ref={consultEndRef} />
+                        </div>
+
+                        <div className="flex gap-2">
+                            <input
+                                value={consultInput}
+                                onChange={e => setConsultInput(e.target.value)}
+                                onKeyDown={e => e.key === 'Enter' && handleConsultSend()}
+                                placeholder={isAILocked ? 'Upgrade to use Health Chat' : 'Ask about your health...'}
+                                disabled={isAILocked}
+                                className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                            />
+                            <button onClick={handleConsultSend} disabled={isAILocked || isConsultLoading || !consultInput.trim()}
+                                className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-3 rounded-xl transition-colors">
+                                <Send className="w-4 h-4" />
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
