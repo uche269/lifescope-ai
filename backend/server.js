@@ -17,6 +17,7 @@ import { readFileSync } from 'fs';
 import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
+import compression from 'compression';
 
 dotenv.config();
 
@@ -143,6 +144,7 @@ app.use(cors({
 }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(compression());
 
 app.use(session({
     store: new PgSession({
@@ -974,13 +976,19 @@ app.get('/api/health/test-results', ensureAuth, async (req, res) => {
 });
 
 // Serve Static Frontend directly (Production Mode)
+
 if (process.env.NODE_ENV === 'production') {
-    app.use(express.static(path.join(__dirname, '../dist')));
+    // Serve frontend files with cache headers
+    app.use(express.static(path.join(__dirname, '../dist'), {
+        maxAge: '1y',
+        etag: false
+    }));
 
     app.get('*', (req, res) => {
         res.sendFile(path.join(__dirname, '../dist/index.html'));
     });
 }
+
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
