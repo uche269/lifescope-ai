@@ -13,7 +13,8 @@ import { Goal, GoalCategory, Activity } from './types';
 
 import Login from './components/Login';
 import Diagnostics from './components/Diagnostics';
-import { supabase } from './lib/supabase';
+// import { supabase } from './lib/supabase'; // Removed
+import { api, fetchGoals as fetchGoalsApi } from './services/api';
 import { useAuth } from './contexts/AuthContext';
 import { checkIsCompleted } from './utils/activityUtils';
 import { Menu, BrainCircuit } from 'lucide-react'; // Added Menu icon
@@ -59,51 +60,44 @@ const MainApp: React.FC = () => {
 
     for (const tmpl of INITIAL_GOALS_TEMPLATE) {
       // Insert Goal
-      const { data: goalData, error: goalError } = await supabase
-        .from('goals')
-        .insert([{
-          user_id: user.id,
+      try {
+        const goalData = await api.post('goals', {
           title: tmpl.title,
           category: tmpl.category,
           priority: tmpl.priority,
           description: tmpl.description,
           progress: tmpl.progress,
           status: tmpl.status
-        }])
-        .select()
-        .single();
-
-      if (goalError || !goalData) {
-        console.error("Error seeding goal:", goalError);
-        continue;
-      }
-
-      // Insert Activities
-      if (tmpl.activities.length > 0) {
-        const activitiesToInsert = tmpl.activities.map(a => ({
-          goal_id: goalData.id,
-          name: a.name,
-          is_completed: a.isCompleted,
-          frequency: a.frequency
-        }));
-
-        const { data: actData, error: actError } = await supabase
-          .from('activities')
-          .insert(activitiesToInsert)
-          .select();
-
-        if (actError) console.error("Error seeding activities:", actError);
-
-        // Construct local object
-        newGoals.push({
-          ...goalData,
-          activities: actData || []
         });
-      } else {
-        newGoals.push({
-          ...goalData,
-          activities: []
-        });
+
+        // Insert Activities
+        if (tmpl.activities.length > 0) {
+          // We have to insert one by one or generic bulk if API supports it. 
+          // Our API supports single insert. Ideally we add bulk insert later.
+          // For now, loop.
+          const actDataList = [];
+          for (const a of tmpl.activities) {
+            const act = await api.post('activities', {
+              goal_id: goalData.id,
+              name: a.name,
+              is_completed: a.isCompleted,
+              frequency: a.frequency
+            });
+            actDataList.push(act);
+          }
+
+          newGoals.push({
+            ...goalData,
+            activities: actDataList || []
+          });
+        } else {
+          newGoals.push({
+            ...goalData,
+            activities: []
+          });
+        }
+      } catch (err) {
+        console.error("Error seeding goal:", err);
       }
     }
     setGoals(newGoals);
@@ -113,15 +107,8 @@ const MainApp: React.FC = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('goals')
-        .select(`
-                *,
-                activities (*)
-            `)
-        .order('created_at', { ascending: true });
-
-      if (error) throw error;
+      // Use helper that handles nested activities via backend specific logic
+      const data = await fetchGoalsApi();
 
       if (data && data.length > 0) {
         const loadedGoals = data.map((g: any) => {

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { Goal, GoalCategory, Activity } from '../types';
 import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles, Maximize2, Minimize2 } from 'lucide-react';
 import { getAIRecommendation } from '../services/geminiService';
-import { supabase } from '../lib/supabase';
+// import { supabase } from '../lib/supabase'; // Removed
+import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { checkIsCompleted } from '../utils/activityUtils';
 import { logError } from '../utils/debugLogger';
@@ -57,16 +58,15 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   }
 
   const saveActivityChanges = async (goalId: string, activityId: string) => {
-    const { error } = await supabase
-      .from('activities')
-      .update({
+    try {
+      const data = await api.put('activities', activityId, {
         name: tempActivityName,
         frequency: tempActivityFreq,
         deadline: tempActivityDeadline || null
-      })
-      .eq('id', activityId);
+      });
 
-    if (error) {
+      // if (error) { ... } handled by try catch
+    } catch (error: any) {
       console.error('Error updating activity:', error);
       alert('Failed to update activity: ' + error.message);
       return;
@@ -108,17 +108,14 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
     if (showEditModal && goalForm.id) {
       // Edit existing
-      const { error } = await supabase
-        .from('goals')
-        .update({
+      try {
+        const data = await api.put('goals', goalForm.id, {
           title: goalForm.title,
           category: goalForm.category,
           priority: goalForm.priority,
           deadline: goalForm.deadline || null
-        })
-        .eq('id', goalForm.id);
+        });
 
-      if (!error) {
         setGoals(goals.map(g => g.id === goalForm.id ? {
           ...g,
           title: goalForm.title,
@@ -127,12 +124,11 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           deadline: goalForm.deadline
         } : g));
         setShowEditModal(null);
-      }
+      } catch (e) { console.error(e); }
     } else {
       // Add new
-      const { data, error } = await supabase
-        .from('goals')
-        .insert([{
+      try {
+        const data = await api.post('goals', {
           user_id: user.id,
           title: goalForm.title,
           category: goalForm.category,
@@ -141,27 +137,26 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           progress: 0,
           status: 'Not Started',
           deadline: goalForm.deadline || null
-        }])
-        .select()
-        .single();
+        });
 
-      if (!error && data) {
-        const newGoal: Goal = {
-          ...data,
-          activities: [] // Init with empty activities
-        };
-        setGoals([...goals, newGoal]);
-        setShowAddModal(false);
-      }
+        if (data) {
+          const newGoal: Goal = {
+            ...data,
+            activities: [] // Init with empty activities
+          };
+          setGoals([...goals, newGoal]);
+          setShowAddModal(false);
+        }
+      } catch (e) { console.error(e); }
     }
   };
 
   const deleteGoal = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this goal?")) {
-      const { error } = await supabase.from('goals').delete().eq('id', id);
-      if (!error) {
+      try {
+        await api.delete('goals', id);
         setGoals(goals.filter(g => g.id !== id));
-      }
+      } catch (e) { console.error(e); }
     }
   };
 
@@ -186,29 +181,19 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
     const newTimestamp = newStatus ? new Date().toISOString() : null;
 
+    const newTimestamp = newStatus ? new Date().toISOString() : null;
+
     // Update Activity in DB
-    const { error } = await supabase
-      .from('activities')
-      .update({
+    try {
+      await api.put('activities', activityId, {
         is_completed: newStatus,
         last_completed_at: newTimestamp
-      })
-      .eq('id', activityId)
-      .select(); // Add select to verify return
-
-    if (error) {
+      });
+    } catch (error: any) {
       logError("Toggle Activity Failed", { error, activityId });
       alert("Failed to save activity status: " + error.message);
       return;
     }
-
-    // Check if we actually updated anything
-    const { data: updatedData } = await supabase.from('activities').select('id').eq('id', activityId);
-    logError("Toggle Activity DB Check", {
-      status: "Update ran",
-      activityId,
-      verifiedRow: updatedData && updatedData.length > 0 ? "FOUND" : "MISSING/RLS BLOCKED"
-    });
 
     // Update Local State
     const updatedActivities = goal.activities.map(a =>
@@ -228,10 +213,12 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     else if (progress === 0) newGoalStatus = 'Not Started';
 
     // Update Goal Progress & Status in DB
-    await supabase.from('goals').update({
-      progress,
-      status: newGoalStatus
-    }).eq('id', goalId);
+    try {
+      await api.put('goals', goalId, {
+        progress,
+        status: newGoalStatus
+      });
+    } catch (e) { console.error(e); }
 
     // Update Local State
     // Update Local State with FUNCTIONAL UPDATE to prevent race conditions
@@ -264,19 +251,18 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     if (!newActivityName.trim()) return;
 
     // Insert into DB
-    const { data, error } = await supabase
-      .from('activities')
-      .insert([{
+    let data;
+    try {
+      data = await api.post('activities', {
         goal_id: goalId,
         name: newActivityName,
         frequency: newActivityFreq,
         is_completed: false,
         deadline: newActivityDeadline || null
-      }])
-      .select()
-      .single();
+      });
+    } catch (e) { return; }
 
-    if (error || !data) return;
+    if (!data) return;
 
     // Update Local
     // Update Local
@@ -311,10 +297,12 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       if (newProgress === 100) newStatus = 'Completed';
       else if (newProgress === 0) newStatus = 'Not Started';
 
-      await supabase.from('goals').update({
-        progress: newProgress,
-        status: newStatus
-      }).eq('id', goalId);
+      try {
+        await api.put('goals', goalId, {
+          progress: newProgress,
+          status: newStatus
+        });
+      } catch (e) { console.error(e); }
     }
 
     setAddingActivityTo(null);
@@ -324,8 +312,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   }
 
   const deleteActivity = async (goalId: string, activityId: string) => {
-    const { error } = await supabase.from('activities').delete().eq('id', activityId);
-    if (error) return;
+    try {
+      await api.delete('activities', activityId);
+    } catch (e) { return; }
 
     setGoals(prevGoals => prevGoals.map(g => {
       if (g.id !== goalId) return g;
