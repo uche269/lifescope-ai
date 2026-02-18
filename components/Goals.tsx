@@ -181,8 +181,6 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
     const newTimestamp = newStatus ? new Date().toISOString() : null;
 
-    const newTimestamp = newStatus ? new Date().toISOString() : null;
-
     // Update Activity in DB
     try {
       await api.put('activities', activityId, {
