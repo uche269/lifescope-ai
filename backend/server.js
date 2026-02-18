@@ -72,6 +72,15 @@ const initDb = async () => {
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;`);
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;`);
 
+        // Add other potential missing columns (for existing tables)
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS ai_calls_today INT DEFAULT 0;`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS ai_calls_reset_at DATE DEFAULT CURRENT_DATE;`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS plan TEXT DEFAULT 'free';`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP WITH TIME ZONE;`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;`);
+
+
         // Finance tables
         await pool.query(`
             CREATE TABLE IF NOT EXISTS public.finance_transactions (
