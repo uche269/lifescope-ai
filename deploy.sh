@@ -37,8 +37,8 @@ if [ ! -f .env ]; then
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgresql://lifescope_user:Nuujj78rfw@76.13.48.189:5432/lifescope
-FRONTEND_URL=http://76.13.48.189
-VITE_API_URL=http://76.13.48.189/api
+FRONTEND_URL=http://76.13.48.189.nip.io
+VITE_API_URL=http://76.13.48.189.nip.io/api
 
 # Auth Secrets - REPLACE THESE!
 GOOGLE_CLIENT_ID=

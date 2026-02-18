@@ -9,6 +9,7 @@
         "dev": "nodemon server.js"
     },
     "dependencies": {
+        "bcryptjs": "^3.0.3",
         "connect-pg-simple": "^9.0.1",
         "cors": "^2.8.5",
         "csv-parse": "^6.1.0",
@@ -20,6 +21,7 @@
         "nodemailer": "^8.0.1",
         "passport": "^0.7.0",
         "passport-google-oauth20": "^2.0.0",
+        "passport-local": "^1.0.0",
         "pdf-parse": "^2.4.5",
         "pg": "^8.11.3"
     },

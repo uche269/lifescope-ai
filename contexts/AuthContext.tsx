@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../lib/supabase';
+
+// Use strict relative path or env var, ensuring no double slashes
+const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
 
 interface UserPlanInfo {
   effectivePlan: 'free' | 'pro' | 'premium';
@@ -15,8 +17,9 @@ interface AuthContextType {
   planInfo: UserPlanInfo | null;
   loading: boolean;
   signOut: () => Promise<void>;
-  signInWithGoogle: () => Promise<{ error: any }>;
-  signInWithMagicLink: (email: string) => Promise<{ error: any }>;
+  signInWithGoogle: () => void;
+  signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
+  registerWithEmail: (data: any) => Promise<{ error: any }>;
   refreshUser: () => Promise<void>;
 }
 
@@ -25,8 +28,9 @@ const AuthContext = createContext<AuthContextType>({
   planInfo: null,
   loading: true,
   signOut: async () => { },
-  signInWithGoogle: async () => ({ error: null }),
-  signInWithMagicLink: async () => ({ error: null }),
+  signInWithGoogle: () => { },
+  signInWithEmail: async () => ({ error: null }),
+  registerWithEmail: async () => ({ error: null }),
   refreshUser: async () => { }
 });
 
@@ -35,72 +39,97 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [planInfo, setPlanInfo] = useState<UserPlanInfo | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const checkUser = async (session: any | null) => {
-    const currentUser = session?.user;
-    if (currentUser) {
-      setUser(currentUser);
-      // Extract plan info from the user object
-      setPlanInfo({
-        effectivePlan: currentUser.effectivePlan || 'free',
-        aiCallsRemaining: currentUser.aiCallsRemaining ?? 0,
-        aiCallsLimit: currentUser.aiCallsLimit ?? 0,
-        trialActive: currentUser.trialActive ?? false,
-        trialDaysLeft: currentUser.trialDaysLeft ?? 0,
-        is_admin: currentUser.is_admin ?? false
-      });
-    } else {
+  const checkUser = async () => {
+    try {
+      const res = await fetch(`${API_URL}/auth/me`);
+      if (res.ok) {
+        const data = await res.json();
+        setUser(data.user);
+        setPlanInfo(data.planInfo);
+      } else {
+        setUser(null);
+        setPlanInfo(null);
+      }
+    } catch (error) {
+      console.error("Auth check failed:", error);
       setUser(null);
       setPlanInfo(null);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
-  };
-
-  const refreshUser = async () => {
-    const { data: { session } } = await supabase.auth.getSession();
-    await checkUser(session);
   };
 
   useEffect(() => {
-    // Check active sessions
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      checkUser(session);
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      checkUser(session);
-    });
-
-    return () => subscription.unsubscribe();
+    checkUser();
   }, []);
 
+  const refreshUser = async () => {
+    await checkUser();
+  };
+
   const signOut = async () => {
-    await supabase.auth.signOut();
-    setUser(null);
-    setPlanInfo(null);
+    try {
+      await fetch(`${API_URL}/auth/logout`, { method: 'POST' });
+      setUser(null);
+      setPlanInfo(null);
+      // Optional: Redirect to login
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
   };
 
-  const signInWithGoogle = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: window.location.origin
-      }
-    });
-    return { error };
+  const signInWithGoogle = () => {
+    // Redirect to backend Google Auth
+    window.location.href = `${API_URL}/auth/google`;
   };
 
-  const signInWithMagicLink = async (email: string) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: window.location.origin
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password })
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { error: { message: data.error || 'Login failed' } };
       }
-    });
-    return { error };
+
+      setUser(data.user);
+      // Refresh to get plan info
+      await checkUser();
+      return { error: null };
+    } catch (error: any) {
+      return { error: { message: error.message || 'Network error' } };
+    }
+  };
+
+  const registerWithEmail = async (formData: any) => {
+    try {
+      const res = await fetch(`${API_URL}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(formData)
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        return { error: { message: data.error || 'Registration failed' } };
+      }
+
+      setUser(data.user);
+      await checkUser();
+      return { error: null };
+    } catch (error: any) {
+      return { error: { message: error.message || 'Network error' } };
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, planInfo, loading, signOut, signInWithGoogle, signInWithMagicLink, refreshUser }}>
+    <AuthContext.Provider value={{ user, planInfo, loading, signOut, signInWithGoogle, signInWithEmail, registerWithEmail, refreshUser }}>
       {children}
     </AuthContext.Provider>
   );

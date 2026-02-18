@@ -2,6 +2,8 @@ import express from 'express';
 import session from 'express-session';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
+import { Strategy as LocalStrategy } from 'passport-local';
+import bcrypt from 'bcryptjs';
 import pg from 'pg';
 import connectPgSimple from 'connect-pg-simple';
 import cors from 'cors';
@@ -64,6 +66,10 @@ const initDb = async () => {
                 created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
             );
         `);
+
+        // Add password_hash and phone columns if they don't exist
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password_hash TEXT;`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS phone TEXT;`);
 
         // Finance tables
         await pool.query(`
@@ -216,6 +222,34 @@ passport.use(new GoogleStrategy({
     }
 ));
 
+// Local Strategy
+passport.use(new LocalStrategy({
+    usernameField: 'email',
+    passwordField: 'password'
+}, async (email, password, done) => {
+    try {
+        const { rows } = await pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
+        const user = rows[0];
+
+        if (!user) {
+            return done(null, false, { message: 'Incorrect email or password.' });
+        }
+
+        if (!user.password_hash) {
+            return done(null, false, { message: 'Please log in with Google.' });
+        }
+
+        const isMatch = await bcrypt.compare(password, user.password_hash);
+        if (!isMatch) {
+            return done(null, false, { message: 'Incorrect email or password.' });
+        }
+
+        return done(null, user);
+    } catch (err) {
+        return done(err);
+    }
+}));
+
 // --- API Routes ---
 
 // Auth Routes
@@ -226,9 +260,77 @@ app.get('/api/auth/google',
 app.get('/api/auth/google/callback',
     passport.authenticate('google', { failureRedirect: '/login' }),
     (req, res) => {
+        // Successful authentication, redirect home.
         res.redirect('/');
     }
 );
+
+// Email/Password Registration
+app.post('/api/auth/register', async (req, res) => {
+    const { email, password, fullName, phone } = req.body;
+
+    if (!email || !password || !fullName) {
+        return res.status(400).json({ error: 'Please provide all required fields' });
+    }
+
+    try {
+        // Check if user exists
+        const { rows: existing } = await pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
+        if (existing.length > 0) {
+            return res.status(400).json({ error: 'User already exists' });
+        }
+
+        // Hash password
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(password, salt);
+
+        // Create user
+        const trialEnd = new Date();
+        trialEnd.setDate(trialEnd.getDate() + 7);
+
+        const { rows } = await pool.query(
+            `INSERT INTO public.users (email, password_hash, full_name, phone, plan, trial_ends_at, last_login) 
+             VALUES ($1, $2, $3, $4, 'free', $5, NOW()) RETURNING *`,
+            [email, passwordHash, fullName, phone, trialEnd]
+        );
+
+        const user = rows[0];
+
+        // Auto login
+        req.login(user, (err) => {
+            if (err) throw err;
+            res.json({ user });
+        });
+
+    } catch (err) {
+        console.error('Registration error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Email/Password Login
+app.post('/api/auth/login', (req, res, next) => {
+    passport.authenticate('local', (err, user, info) => {
+        if (err) return next(err);
+        if (!user) return res.status(400).json({ error: info.message });
+
+        req.logIn(user, (err) => {
+            if (err) return next(err);
+
+            // Update last login
+            pool.query('UPDATE public.users SET last_login = NOW() WHERE id = $1', [user.id]);
+            return res.json({ user });
+        });
+    })(req, res, next);
+});
+
+// Logout
+app.post('/api/auth/logout', (req, res) => {
+    req.logout((err) => {
+        if (err) return res.status(500).json({ error: 'Logout failed' });
+        res.json({ success: true });
+    });
+});
 
 app.get('/api/auth/me', async (req, res) => {
     if (req.isAuthenticated()) {
