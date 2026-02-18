@@ -187,7 +187,7 @@ app.get('/api/health', async (req, res) => {
 // Generic "table" endpoint for simple CRUD - Replicates supabase.from('table').select()
 app.get('/api/data/:table', ensureAuth, async (req, res) => {
     const { table } = req.params;
-    const { select, order } = req.query;
+    const { select, order, limit } = req.query;
 
     // Security: Whitelist allowed tables
     const allowedTables = ['goals', 'activities', 'categories', 'weight_logs', 'measurements', 'food_logs'];
@@ -249,6 +249,11 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
             const safeCol = col.replace(/[^a-z_]/g, '');
             const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
             query += ` ORDER BY "${safeCol}" ${safeDir}`;
+        }
+
+        if (limit) {
+            const safeLimit = parseInt(limit, 10);
+            if (safeLimit > 0) query += ` LIMIT ${safeLimit}`;
         }
 
         const { rows } = await pool.query(query, values);

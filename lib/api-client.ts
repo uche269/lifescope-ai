@@ -52,6 +52,10 @@ export const apiClient = {
                         params.set(`filter_${column}`, value);
                         return queryBuilder;
                     },
+                    limit: (count: number) => {
+                        params.set('limit', count.toString());
+                        return queryBuilder;
+                    },
                     single: () => {
                         params.set('single', 'true');
                         return queryBuilder;
@@ -67,8 +71,9 @@ export const apiClient = {
                 return queryBuilder;
             },
             insert: (data: any) => {
+                // Supabase pattern: .insert([{...}]) — unwrap single-element arrays
+                const payload = Array.isArray(data) ? data[0] : data;
                 const insertBuilder: any = {
-                    _data: null as any,
                     _single: false,
                     select: () => {
                         return insertBuilder;
@@ -82,7 +87,7 @@ export const apiClient = {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json' },
                             credentials: 'include',
-                            body: JSON.stringify(data)
+                            body: JSON.stringify(payload)
                         })
                             .then(r => r.json())
                             .then(json => {
