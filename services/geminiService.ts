@@ -4,7 +4,8 @@ import { logError } from '../utils/debugLogger';
 // Helper to initialize AI with dynamic key
 const getAI = () => {
   const storedKey = localStorage.getItem('ls_gemini_key');
-  const apiKey = storedKey || import.meta.env.VITE_GEMINI_API_KEY || '';
+  // vite.config.ts exposes GEMINI_API_KEY as process.env.GEMINI_API_KEY (no VITE_ prefix needed)
+  const apiKey = storedKey || (process.env as any).GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
   return new GoogleGenAI({ apiKey });
 };
 

@@ -12,8 +12,7 @@ import NotificationBanner from './components/NotificationBanner';
 import { Goal, GoalCategory, Activity } from './types';
 
 import Login from './components/Login';
-import Diagnostics from './components/Diagnostics';
-// import { supabase } from './lib/supabase'; // Removed
+// Diagnostics removed for production
 import { api, fetchGoals as fetchGoalsApi } from './services/api';
 import { useAuth } from './contexts/AuthContext';
 import { checkIsCompleted } from './utils/activityUtils';
@@ -208,8 +207,6 @@ const MainApp: React.FC = () => {
       {/* Floating Chat Widget */}
       <ChatWidget />
 
-      {/* Debug Panel */}
-      <Diagnostics goals={goals} />
     </div>
   );
 };
