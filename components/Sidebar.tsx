@@ -39,17 +39,17 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
 
       {/* Sidebar Container */}
       <div className={`
-        w-64 h-screen bg-slate-950 border-r border-slate-900 flex flex-col fixed left-0 top-0 z-50
+        w-64 h-screen bg-slate-950/90 backdrop-blur-xl border-r border-indigo-500/10 flex flex-col fixed left-0 top-0 z-50
         transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         md:translate-x-0
       `}>
         <div className="p-6 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center shadow-[0_0_15px_rgba(79,70,229,0.5)]">
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center shadow-[0_0_20px_rgba(99,102,241,0.5)]">
               <BrainCircuit className="text-white w-5 h-5" />
             </div>
-            <span className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-slate-400">
+            <span className="text-xl font-bold glow-text">
               LifeScope
             </span>
           </div>
@@ -68,8 +68,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
                 to={item.id === 'dashboard' ? '/' : `/${item.id}`}
                 onClick={() => onClose()} // Close sidebar on nav click (mobile)
                 className={({ isActive }) => `w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all duration-200 group ${isActive
-                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
-                  : 'text-slate-400 hover:bg-slate-900 hover:text-slate-200'
+                  ? 'bg-gradient-to-r from-indigo-600/80 to-indigo-700/60 text-white shadow-lg shadow-indigo-500/25 nav-active'
+                  : 'text-slate-400 hover:bg-slate-900/80 hover:text-slate-200'
                   }`}
               >
                 <Icon className="w-5 h-5 group-hover:text-white" />
@@ -84,8 +84,8 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             to="/settings"
             onClick={() => onClose()}
             className={({ isActive }) => `flex items-center gap-3 px-4 py-3 transition-colors w-full rounded-lg ${isActive
-              ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-500/20'
-              : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900'
+              ? 'bg-gradient-to-r from-indigo-600/80 to-indigo-700/60 text-white shadow-lg shadow-indigo-500/25 nav-active'
+              : 'text-slate-500 hover:text-slate-300 hover:bg-slate-900/80'
               }`}
           >
             <Settings className="w-5 h-5" />

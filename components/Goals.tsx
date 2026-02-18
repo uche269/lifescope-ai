@@ -369,17 +369,6 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
               onChange={(e) => setGoalForm({ ...goalForm, title: e.target.value })}
             />
 
-            <label className="block text-xs text-slate-400 mb-1">Category</label>
-            <select
-              className="w-full bg-slate-950 border border-slate-800 rounded-lg p-3 text-white mb-4 focus:border-indigo-500 focus:outline-none"
-              value={goalForm.category}
-              onChange={(e) => setGoalForm({ ...goalForm, category: e.target.value as GoalCategory })}
-            >
-              {Object.values(GoalCategory).map(cat => (
-                <option key={cat} value={cat}>{cat}</option>
-              ))}
-            </select>
-
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">Deadline (Optional)</label>
@@ -469,7 +458,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                   <span>{goal.progress}%</span>
                 </div>
                 <div className="h-2 bg-slate-800 rounded-full overflow-hidden">
-                  <div className="h-full bg-indigo-500 transition-all duration-500" style={{ width: `${goal.progress}%` }} />
+                  <div className="h-full progress-bar-glow transition-all duration-500" style={{ width: `${goal.progress}%` }} />
                 </div>
               </div>
 

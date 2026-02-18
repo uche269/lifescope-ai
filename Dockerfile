@@ -4,6 +4,11 @@ WORKDIR /app/frontend
 COPY package*.json ./
 RUN npm ci
 COPY . .
+# Pass env vars as build args so Vite bakes them into the bundle
+ARG VITE_GEMINI_API_KEY
+ARG VITE_API_URL
+ENV VITE_GEMINI_API_KEY=$VITE_GEMINI_API_KEY
+ENV VITE_API_URL=$VITE_API_URL
 # Build Vite app to /app/frontend/dist
 RUN npm run build
 

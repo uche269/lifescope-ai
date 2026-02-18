@@ -165,11 +165,11 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
   });
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-page-enter">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
-          <h1 className="text-2xl md:text-3xl font-bold text-white mb-2">
+          <h1 className="text-2xl md:text-3xl font-bold glow-text mb-2">
             Welcome back, {user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'Boss'}
           </h1>
           <p className="text-slate-400 text-sm md:text-base">Here's your LifeScope overview for today.</p>
@@ -189,7 +189,7 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
       <div className="flex justify-end">
         <button
           onClick={handleGenerateReport}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl transition-all shadow-[0_0_15px_rgba(99,102,241,0.3)] hover:scale-105"
+          className="flex items-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white px-5 py-2.5 rounded-xl transition-all shadow-[0_0_20px_rgba(99,102,241,0.3)] hover:shadow-[0_0_30px_rgba(99,102,241,0.5)] hover:scale-105 pulse-ring font-medium"
         >
           <Sparkles className="w-4 h-4" /> Year-in-Review
         </button>
@@ -243,12 +243,12 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
 
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
+        <div className="glass-panel halo-card p-6 rounded-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-indigo-600/10 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
           <div className="flex justify-between items-start mb-4">
             <div>
               <p className="text-slate-400 text-sm font-medium">Overall Progress</p>
-              <h3 className="text-3xl font-bold text-white mt-1">{overallProgress}%</h3>
+              <h3 className="text-3xl font-bold stat-number mt-1">{overallProgress}%</h3>
             </div>
             <div className="p-2 bg-indigo-500/20 rounded-lg">
               <TrendingUp className="w-6 h-6 text-indigo-400" />
@@ -257,12 +257,12 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
           <p className="text-xs text-indigo-300">Across all categories</p>
         </div>
 
-        <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
+        <div className="glass-panel halo-card p-6 rounded-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-emerald-600/10 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
           <div className="flex justify-between items-start mb-4">
             <div>
               <p className="text-slate-400 text-sm font-medium">Activities Done</p>
-              <h3 className="text-3xl font-bold text-white mt-1">{completedActivities}</h3>
+              <h3 className="text-3xl font-bold stat-number mt-1">{completedActivities}</h3>
             </div>
             <div className="p-2 bg-emerald-500/20 rounded-lg">
               <CheckCircle2 className="w-6 h-6 text-emerald-400" />
@@ -271,12 +271,12 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
           <p className="text-xs text-emerald-300">Across all goals</p>
         </div>
 
-        <div className="glass-panel p-6 rounded-2xl relative overflow-hidden group">
+        <div className="glass-panel halo-card p-6 rounded-2xl relative overflow-hidden group">
           <div className="absolute top-0 right-0 w-24 h-24 bg-amber-600/10 rounded-full -mr-12 -mt-12 transition-transform group-hover:scale-110"></div>
           <div className="flex justify-between items-start mb-4">
             <div>
               <p className="text-slate-400 text-sm font-medium">Active Focus</p>
-              <h3 className="text-3xl font-bold text-white mt-1">{activeGoals}</h3>
+              <h3 className="text-3xl font-bold stat-number mt-1">{activeGoals}</h3>
             </div>
             <div className="p-2 bg-amber-500/20 rounded-lg">
               <AlertCircle className="w-6 h-6 text-amber-400" />
