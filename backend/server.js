@@ -12,7 +12,7 @@ import { createTransport } from 'nodemailer';
 import multer from 'multer';
 import { parse } from 'csv-parse/sync';
 import { readFileSync } from 'fs';
-import pdfParse from 'pdf-parse';
+import pdfParse from 'pdf-parse/lib/pdf-parse.js';
 
 dotenv.config();
 
