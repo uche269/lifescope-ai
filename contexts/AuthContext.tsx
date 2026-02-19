@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 
-// Use strict relative path or env var, ensuring no double slashes
-const API_URL = (import.meta.env.VITE_API_URL || '').replace(/\/$/, '');
+// Always use relative path — frontend and backend are co-hosted on the same server
+const API_URL = '/api';
 
 interface UserPlanInfo {
   effectivePlan: 'free' | 'pro' | 'premium';
