@@ -19,6 +19,8 @@
     "lucide-react": "^0.344.0",
     "openai": "^6.15.0",
     "pdf-lib": "^1.17.1",
+    "react-pdf": "^9.1.0",
+    "react-draggable": "^4.4.6",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "6.22.3",
