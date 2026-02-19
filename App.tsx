@@ -9,7 +9,7 @@ import Settings from './components/Settings';
 import Health from './components/Health';
 import ChatWidget from './components/ChatWidget';
 import NotificationBanner from './components/NotificationBanner';
-import { Goal, GoalCategory, Activity, DefaultGoalCategories } from './types';
+import { Goal, GoalCategory, Activity } from './types';
 
 import Login from './components/Login';
 // Diagnostics removed for production

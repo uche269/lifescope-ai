@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Goal, GoalCategory, Activity, DefaultGoalCategories } from '../types';
+import { Goal, GoalCategory, Activity } from '../types';
 import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles, Maximize2, Minimize2, LayoutTemplate } from 'lucide-react';
 import { getAIRecommendation } from '../services/geminiService';
 // import { supabase } from '../lib/supabase'; // Removed
