@@ -520,6 +520,69 @@ app.get('/api/health', async (req, res) => {
 });
 
 // Data Routes (Adapting Supabase calls)
+
+// Specialized route for Renaming Categories (with cascade)
+app.put('/api/goal_categories/:id', ensureAuth, async (req, res) => {
+    const { id } = req.params;
+    const { name } = req.body;
+    const userId = req.user.id;
+
+    if (!name) return res.status(400).json({ error: "Name is required" });
+
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Get old name
+        const checkRes = await client.query(
+            'SELECT name FROM public.goal_categories WHERE id = $1 AND user_id = $2',
+            [id, userId]
+        );
+
+        if (checkRes.rows.length === 0) {
+            await client.query('ROLLBACK');
+            return res.status(404).json({ error: "Category not found" });
+        }
+        const oldName = checkRes.rows[0].name;
+
+        // 2. Update category name
+        const updateRes = await client.query(
+            'UPDATE public.goal_categories SET name = $1 WHERE id = $2 RETURNING *',
+            [name, id]
+        );
+
+        // 3. Update all goals using this category
+        await client.query(
+            'UPDATE public.goals SET category = $1 WHERE category = $2 AND user_id = $3',
+            [name, oldName, userId]
+        );
+
+        await client.query('COMMIT');
+        res.json(updateRes.rows[0]);
+    } catch (e) {
+        await client.query('ROLLBACK');
+        console.error("Category rename error:", e);
+        res.status(500).json({ error: e.message });
+    } finally {
+        client.release();
+    }
+});
+
+// Specialized route for Deleting Categories
+app.delete('/api/goal_categories/:id', ensureAuth, async (req, res) => {
+    const { id } = req.params;
+    const userId = req.user.id;
+    try {
+        // Just delete the category record. Goals will keep the string value (becoming "custom/ghost" categories)
+        // or the user can reassign them manually.
+        await pool.query('DELETE FROM public.goal_categories WHERE id = $1 AND user_id = $2', [id, userId]);
+        res.json({ success: true });
+    } catch (e) {
+        console.error("Category delete error:", e);
+        res.status(500).json({ error: e.message });
+    }
+});
+
 // Generic "table" endpoint for simple CRUD - Replicates supabase.from('table').select()
 app.get('/api/data/:table', ensureAuth, async (req, res) => {
     const { table } = req.params;
@@ -685,19 +748,52 @@ app.delete('/api/data/:table', ensureAuth, async (req, res) => {
         // Enforce ownership: only allow deleting records that belong to the logged-in user
         if (table === 'activities') {
             // Activities don't have user_id — verify via parent goal
-            await pool.query(
-                `DELETE FROM public."activities" WHERE id = $1
-                 AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $2)`,
-                [id, req.user.id]
-            );
+            const checkQuery = `SELECT id FROM public."activities" WHERE id = $1 
+                                AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $2)`;
+            const { rows } = await pool.query(checkQuery, [id, req.user.id]);
+
+            if (rows.length === 0) {
+                return res.status(404).json({ error: "Record not found or access denied" });
+            }
         } else {
-            await pool.query(`DELETE FROM public."${table}" WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+            // Standard user_id check
+            const checkQuery = `SELECT id FROM public."${table}" WHERE id = $1 AND user_id = $2`;
+            const { rows } = await pool.query(checkQuery, [id, req.user.id]);
+
+            if (rows.length === 0) {
+                return res.status(404).json({ error: "Record not found or access denied" });
+            }
         }
-        res.json({ error: null });
+
+        // Special handling for Goals: Delete associated activities first (Cascade)
+        if (table === 'goals') {
+            await pool.query('DELETE FROM public."activities" WHERE goal_id = $1', [id]);
+        }
+
+        // Perform the delete
+        let query;
+        if (table === 'activities') {
+            query = `DELETE FROM public."activities" WHERE id = $1`;
+        } else {
+            query = `DELETE FROM public."${table}" WHERE id = $1 AND user_id = $2`;
+        }
+
+        await pool.query(query, table === 'activities' ? [id] : [id, req.user.id]);
+        res.json({ success: true, id });
     } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: { message: err.message } });
+        await pool.query(
+            `DELETE FROM public."activities" WHERE id = $1
+                 AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $2)`,
+            [id, req.user.id]
+        );
+    } else {
+        await pool.query(`DELETE FROM public."${table}" WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
     }
+    res.json({ error: null });
+} catch (err) {
+    console.error(err);
+    res.status(500).json({ error: { message: err.message } });
+}
 });
 
 

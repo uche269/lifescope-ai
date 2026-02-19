@@ -1,13 +1,4 @@
-export const DefaultGoalCategories = {
-  PHYSICAL: 'Physical appearance',
-  HEALTH: 'Health, weight & diet',
-  SELF_DEV: 'Self development',
-  PERSONAL: 'Personal projects',
-  WORK: 'Work projects',
-  FAMILY: 'Family activities',
-  FINANCE: 'Finances',
-  RELOCATION: 'Relocation to Canada',
-} as const;
+export const DefaultGoalCategories = {} as const;
 
 export type GoalCategory = string;
 

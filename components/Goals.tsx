@@ -16,8 +16,8 @@ interface GoalsProps {
 const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   const { user } = useAuth();
 
-  // Categories State
-  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  // Categories State - Now storing objects for ID access
+  const [customCategories, setCustomCategories] = useState<{ id: string, name: string }[]>([]);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState('');
 
@@ -28,25 +28,26 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       try {
         const data = await api.get('goal_categories');
         if (Array.isArray(data)) {
-          setCustomCategories(data.map((c: any) => c.name));
+          setCustomCategories(data.map((c: any) => ({ id: c.id, name: c.name })));
         }
       } catch (e) { console.error(e); }
     };
     fetchCategories();
   }, [user]);
 
-  const allCategories = [...new Set([...Object.values(DefaultGoalCategories), ...customCategories])];
+  // Derived list of category names for dropdowns
+  const allCategories = customCategories.map(c => c.name);
 
   const handleCreateCategory = async () => {
     if (!newCategoryName.trim() || !user) return;
     try {
-      await api.post('goal_categories', {
+      const data = await api.post('goal_categories', {
         user_id: user.id,
         name: newCategoryName,
         color: '#3b82f6',
         is_default: false
       });
-      setCustomCategories([...customCategories, newCategoryName]);
+      setCustomCategories([...customCategories, { id: data.id, name: data.name }]);
       setGoalForm({ ...goalForm, category: newCategoryName });
       setIsAddingCategory(false);
       setNewCategoryName('');
@@ -64,7 +65,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     category: string,
     priority: 'High' | 'Medium' | 'Low',
     deadline?: string
-  }>({ title: '', category: DefaultGoalCategories.PERSONAL, priority: 'Medium', deadline: '' });
+  }>({ title: '', category: '', priority: 'Medium', deadline: '' });
 
   // Activity Editing State
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
@@ -124,7 +125,10 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   }
 
   const openAddModal = () => {
-    setGoalForm({ title: '', category: DefaultGoalCategories.PERSONAL, priority: 'Medium', deadline: '' });
+    setGoalForm({ title: '', category: '', priority: 'Medium', deadline: '' });
+    if (customCategories.length === 0) {
+      setIsAddingCategory(true);
+    }
     setShowAddModal(true);
   };
 
@@ -141,6 +145,10 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
   const handleSaveGoal = async () => {
     if (!goalForm.title || !user) return;
+    if (!goalForm.category) {
+      alert("Please select or create a category.");
+      return;
+    }
 
     if (showEditModal && goalForm.id) {
       // Edit existing
@@ -187,7 +195,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     }
   };
 
-  const deleteGoal = async (id: string) => {
+  const handleDeleteGoal = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this goal?")) {
       try {
         await api.delete('goals', id);
@@ -334,20 +342,38 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   }
 
   const [showCategoryManager, setShowCategoryManager] = useState(false);
-  const [editingCategory, setEditingCategory] = useState<{ id: string, name: string } | null>(null);
+  const [editingCatId, setEditingCatId] = useState<string | null>(null);
+  const [editCatName, setEditCatName] = useState('');
 
-  const handleDeleteCategory = async (catName: string) => {
-    // Logic to delete category from DB (if not default)
-    if (Object.values(DefaultGoalCategories).includes(catName)) {
-      alert("Cannot delete default categories.");
-      return;
+  const handleDeleteCategory = async (catId: string) => {
+    if (window.confirm("Are you sure? Goals in this category will not be deleted but may lose their category label.")) {
+      try {
+        await api.delete('goal_categories', catId);
+        setCustomCategories(customCategories.filter(c => c.id !== catId));
+      } catch (e) { console.error(e); }
     }
-    if (window.confirm(`Delete category "${catName}"? Goals in this category will need a new category.`)) {
-      // In a real app we'd need the ID, but here we might need to look it up or change how we store customCategories
-      // For now, let's just filter it out of state to confirm UI
-      setCustomCategories(customCategories.filter(c => c !== catName));
-      // TODO: Add API call to delete by name or ID
-    }
+  };
+
+  const startEditCategory = (cat: { id: string, name: string }) => {
+    setEditingCatId(cat.id);
+    setEditCatName(cat.name);
+  };
+
+  const saveCategoryRename = async () => {
+    if (!editingCatId || !editCatName.trim()) return;
+    try {
+      await api.put('goal_categories', editingCatId, { name: editCatName });
+      setCustomCategories(customCategories.map(c => c.id === editingCatId ? { ...c, name: editCatName } : c));
+
+      // Update local goals to reflect the rename immediately (UI sync)
+      const oldCat = customCategories.find(c => c.id === editingCatId)?.name;
+      if (oldCat) {
+        setGoals(goals.map(g => g.category === oldCat ? { ...g, category: editCatName } : g));
+      }
+
+      setEditingCatId(null);
+      setEditCatName('');
+    } catch (e) { console.error(e); }
   };
 
   const handleAddActivity = (goalId: string) => {
@@ -356,6 +382,25 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
   return (
     <div className="space-y-6">
+      {/* Goal Guide / Tips Section */}
+      <div className="bg-gradient-to-r from-indigo-900/30 to-purple-900/20 border border-indigo-500/20 rounded-2xl p-6 relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-4 opacity-10">
+          <Sparkles className="w-24 h-24 text-white" />
+        </div>
+        <h3 className="text-lg font-semibold text-white mb-2 flex items-center gap-2">
+          <Sparkles className="w-5 h-5 text-amber-300" />
+          Getting Started with Goals
+        </h3>
+        <p className="text-slate-300 text-sm max-w-3xl mb-4">
+          To get the most out of LifeScope, start by creating **Categories** for your life areas (e.g., "Health", "Career", "Finance").
+          Then add specific **Projects or Goals** within those categories. Break them down into small, actionable **Activities** to track your progress!
+        </p>
+        <div className="flex gap-2 text-xs text-indigo-300/80">
+          <span className="bg-indigo-950/50 px-2 py-1 rounded border border-indigo-500/20">💡 Tip: Use the AI button on goals to get actionable advice.</span>
+          <span className="bg-indigo-950/50 px-2 py-1 rounded border border-indigo-500/20">📅 Tip: Set deadlines to stay accountable.</span>
+        </div>
+      </div>
+
       <div className="flex justify-between items-center">
         <div>
           <h2 className="text-2xl font-bold text-white">Projects & Goals</h2>
@@ -388,29 +433,41 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
             <div className="space-y-4 mb-6 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
               <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Default</h4>
-                {Object.values(DefaultGoalCategories).map(cat => (
-                  <div key={cat} className="flex items-center justify-between p-3 bg-slate-950/50 rounded-lg border border-slate-800">
-                    <span className="text-slate-300">{cat}</span>
-                    <span className="text-[10px] bg-slate-900 text-slate-500 px-2 py-1 rounded">System</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="space-y-2">
                 <h4 className="text-xs font-semibold text-indigo-400 uppercase tracking-wider flex items-center gap-2">
-                  Custom <span className="bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded-full text-[10px]">{customCategories.length}</span>
+                  My Categories <span className="bg-indigo-500/10 text-indigo-400 px-1.5 py-0.5 rounded-full text-[10px]">{customCategories.length}</span>
                 </h4>
                 {customCategories.length > 0 ? customCategories.map(cat => (
-                  <div key={cat} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/30 transition-colors group">
-                    <span className="text-white">{cat}</span>
-                    <button onClick={() => handleDeleteCategory(cat)} className="text-slate-500 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                  <div key={cat.id} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800 hover:border-indigo-500/30 transition-colors group">
+                    {editingCatId === cat.id ? (
+                      <div className="flex flex-1 gap-2 mr-2">
+                        <input
+                          value={editCatName}
+                          onChange={(e) => setEditCatName(e.target.value)}
+                          className="flex-1 bg-slate-900 border border-indigo-500 rounded px-2 py-1 text-white text-sm focus:outline-none"
+                          autoFocus
+                        />
+                        <button onClick={saveCategoryRename} className="p-1 text-emerald-400 hover:bg-emerald-500/10 rounded"><Check className="w-4 h-4" /></button>
+                        <button onClick={() => setEditingCatId(null)} className="p-1 text-slate-400 hover:bg-slate-800 rounded"><X className="w-4 h-4" /></button>
+                      </div>
+                    ) : (
+                      <span className="text-white">{cat.name}</span>
+                    )}
+
+                    {editingCatId !== cat.id && (
+                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => startEditCategory(cat)} className="text-slate-500 hover:text-indigo-400 p-1.5 rounded hover:bg-indigo-500/10 transition-colors">
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button onClick={() => handleDeleteCategory(cat.id)} className="text-slate-500 hover:text-red-400 p-1.5 rounded hover:bg-red-500/10 transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                 )) : (
-                  <div className="text-center p-4 border border-dashed border-slate-800 rounded-lg text-slate-500 text-sm">
-                    No custom categories yet.
+                  <div className="text-center p-8 border border-dashed border-slate-800 rounded-xl bg-slate-950/30">
+                    <p className="text-slate-400 text-sm mb-2">No categories yet.</p>
+                    <p className="text-slate-600 text-xs">Create your first category below to get started!</p>
                   </div>
                 )}
               </div>
@@ -473,6 +530,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                         onChange={(e) => setGoalForm({ ...goalForm, category: e.target.value })}
                         className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-white focus:outline-none focus:border-indigo-500 transition-colors"
                       >
+                        <option value="" disabled>Select a category...</option>
                         {allCategories.map(cat => (
                           <option key={cat} value={cat}>{cat}</option>
                         ))}
@@ -535,8 +593,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                         className="accent-indigo-500 w-4 h-4"
                       />
                       <span className={`text-sm font-medium transition-colors ${goalForm.priority === p
-                          ? p === 'High' ? 'text-red-400' : p === 'Medium' ? 'text-amber-400' : 'text-slate-200'
-                          : 'text-slate-400 group-hover:text-slate-300'
+                        ? p === 'High' ? 'text-red-400' : p === 'Medium' ? 'text-amber-400' : 'text-slate-200'
+                        : 'text-slate-400 group-hover:text-slate-300'
                         }`}>{p}</span>
                     </label>
                   ))}
@@ -688,7 +746,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                         <div key={activity.id} className="group flex items-center justify-between p-2 hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700">
                           <div className="flex items-center gap-3 flex-1 overflow-hidden">
                             <button
-                              onClick={() => toggleActivity(activity)}
+                              onClick={() => toggleActivity(goal.id, activity.id)}
                               className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all duration-300
                                   ${checkIsCompleted(activity) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-600 hover:border-indigo-500'}`}
                             >
