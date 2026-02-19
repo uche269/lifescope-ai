@@ -780,20 +780,11 @@ app.delete('/api/data/:table', ensureAuth, async (req, res) => {
 
         await pool.query(query, table === 'activities' ? [id] : [id, req.user.id]);
         res.json({ success: true, id });
+
     } catch (err) {
-        await pool.query(
-            `DELETE FROM public."activities" WHERE id = $1
-                 AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $2)`,
-            [id, req.user.id]
-        );
-    } else {
-        await pool.query(`DELETE FROM public."${table}" WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+        console.error(err);
+        res.status(500).json({ error: { message: err.message } });
     }
-    res.json({ error: null });
-} catch (err) {
-    console.error(err);
-    res.status(500).json({ error: { message: err.message } });
-}
 });
 
 
