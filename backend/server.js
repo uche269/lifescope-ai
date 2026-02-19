@@ -37,7 +37,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 
 // Database Connection
 const pool = new pg.Pool({
@@ -85,6 +85,17 @@ const initDb = async () => {
 
 
         // Finance tables
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS public.goal_categories (
+                id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+                user_id UUID NOT NULL,
+                name TEXT NOT NULL,
+                color TEXT DEFAULT '#3b82f6',
+                is_default BOOLEAN DEFAULT false,
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         await pool.query(`
             CREATE TABLE IF NOT EXISTS public.finance_transactions (
                 id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
@@ -213,8 +224,8 @@ passport.deserializeUser(async (id, done) => {
 });
 
 passport.use(new GoogleStrategy({
-    clientID: process.env.GOOGLE_CLIENT_ID,
-    clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+    clientID: process.env.GOOGLE_CLIENT_ID || "mock_client_id",
+    clientSecret: process.env.GOOGLE_CLIENT_SECRET || "mock_client_secret",
     callbackURL: "/api/auth/google/callback"
 },
     async (accessToken, refreshToken, profile, done) => {
@@ -466,7 +477,7 @@ const ensureAdmin = async (req, res, next) => {
 };
 
 // Data Migration Endpoint (Legacy Recovery)
-app.post('/api/auth/migrate-legacy-data', ensureAuth, async (req, res) => {
+app.post('/api/auth/migrate-legacy-data', ensureAuth, ensureAdmin, async (req, res) => {
     try {
         const userId = req.user.id;
         const tables = ['goals', 'finance_transactions', 'finance_budgets', 'health_test_results', 'weight_logs', 'food_logs', 'chat_logs', 'measurements'];
@@ -515,7 +526,7 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
     const { select, order, limit } = req.query;
 
     // Security: Whitelist allowed tables
-    const allowedTables = ['goals', 'activities', 'categories', 'weight_logs', 'measurements', 'food_logs', 'finance_transactions', 'finance_budgets', 'health_test_results', 'chat_logs'];
+    const allowedTables = ['goals', 'activities', 'categories', 'goal_categories', 'weight_logs', 'measurements', 'food_logs', 'finance_transactions', 'finance_budgets', 'health_test_results', 'chat_logs'];
     if (!allowedTables.includes(table)) {
         return res.status(403).json({ error: "Access denied to table" });
     }
@@ -594,7 +605,7 @@ app.post('/api/data/:table', ensureAuth, async (req, res) => {
     const { table } = req.params;
     const payload = req.body;
 
-    const allowedTables = ['goals', 'activities', 'weight_logs', 'measurements', 'food_logs'];
+    const allowedTables = ['goals', 'activities', 'goal_categories', 'weight_logs', 'measurements', 'food_logs'];
     if (!allowedTables.includes(table)) {
         return res.status(403).json({ error: "Access denied" });
     }
@@ -627,7 +638,7 @@ app.put('/api/data/:table', ensureAuth, async (req, res) => {
     const payload = req.body;
     const { id } = req.query;
 
-    const allowedTables = ['goals', 'activities', 'weight_logs', 'measurements', 'food_logs', 'finance_transactions', 'finance_budgets', 'health_test_results', 'chat_logs'];
+    const allowedTables = ['goals', 'activities', 'goal_categories', 'weight_logs', 'measurements', 'food_logs', 'finance_transactions', 'finance_budgets', 'health_test_results', 'chat_logs'];
     if (!allowedTables.includes(table) || !id) {
         return res.status(403).json({ error: "Access denied or missing id" });
     }
@@ -638,8 +649,21 @@ app.put('/api/data/:table', ensureAuth, async (req, res) => {
         const setStr = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
         values.push(id);
 
-        const query = `UPDATE public."${table}" SET ${setStr} WHERE id = $${values.length} RETURNING *`;
+        // Enforce ownership: only allow updating records that belong to the logged-in user
+        let query;
+        if (table === 'activities') {
+            // Activities don't have user_id directly — verify via parent goal
+            query = `UPDATE public."activities" SET ${setStr} WHERE id = $${values.length}
+                     AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $${values.length + 1}) RETURNING *`;
+            values.push(req.user.id);
+        } else {
+            query = `UPDATE public."${table}" SET ${setStr} WHERE id = $${values.length} AND user_id = $${values.length + 1} RETURNING *`;
+            values.push(req.user.id);
+        }
         const { rows } = await pool.query(query, values);
+        if (rows.length === 0) {
+            return res.status(404).json({ data: null, error: { message: 'Record not found or access denied' } });
+        }
         res.json({ data: rows[0], error: null });
     } catch (err) {
         console.error(err);
@@ -652,13 +676,23 @@ app.delete('/api/data/:table', ensureAuth, async (req, res) => {
     const { table } = req.params;
     const { id } = req.query;
 
-    const allowedTables = ['goals', 'activities', 'weight_logs', 'measurements', 'food_logs', 'finance_transactions', 'finance_budgets', 'health_test_results', 'chat_logs'];
+    const allowedTables = ['goals', 'activities', 'goal_categories', 'weight_logs', 'measurements', 'food_logs', 'finance_transactions', 'finance_budgets', 'health_test_results', 'chat_logs'];
     if (!allowedTables.includes(table) || !id) {
         return res.status(403).json({ error: "Access denied or missing id" });
     }
 
     try {
-        await pool.query(`DELETE FROM public."${table}" WHERE id = $1`, [id]);
+        // Enforce ownership: only allow deleting records that belong to the logged-in user
+        if (table === 'activities') {
+            // Activities don't have user_id — verify via parent goal
+            await pool.query(
+                `DELETE FROM public."activities" WHERE id = $1
+                 AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $2)`,
+                [id, req.user.id]
+            );
+        } else {
+            await pool.query(`DELETE FROM public."${table}" WHERE id = $1 AND user_id = $2`, [id, req.user.id]);
+        }
         res.json({ error: null });
     } catch (err) {
         console.error(err);

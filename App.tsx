@@ -9,7 +9,7 @@ import Settings from './components/Settings';
 import Health from './components/Health';
 import ChatWidget from './components/ChatWidget';
 import NotificationBanner from './components/NotificationBanner';
-import { Goal, GoalCategory, Activity } from './types';
+import { Goal, GoalCategory, Activity, DefaultGoalCategories } from './types';
 
 import Login from './components/Login';
 // Diagnostics removed for production
@@ -24,117 +24,43 @@ const MainApp: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false); // Sidebar State
 
-  // Initial Mock Data (used for seeding)
-  const INITIAL_GOALS_TEMPLATE = [
-    {
-      title: 'Lose 5kg by December',
-      category: GoalCategory.HEALTH,
-      priority: 'Medium',
-      description: 'Gym and Diet plan',
-      progress: 65,
-      status: 'In Progress',
-      activities: [
-        { name: 'Morning Cardio', isCompleted: true, frequency: 'Daily' },
-        { name: 'No Sugar', isCompleted: false, frequency: 'Daily' }
-      ]
-    },
-    {
-      title: 'Save CAD $15,000',
-      category: GoalCategory.RELOCATION,
-      priority: 'High',
-      description: 'Relocation fund',
-      progress: 40,
-      status: 'In Progress',
-      activities: [
-        { name: 'Transfer to FX Account', isCompleted: true, frequency: 'Monthly' }
-      ]
-    }
-  ];
+  // Initial Mock Data (used for seeding) - REMOVED to prevent leakage
+  // const INITIAL_GOALS_TEMPLATE = ...
 
-  const seedInitialData = async () => {
-    if (!user) return;
-    console.log("Seeding initial data...");
-
-    const newGoals: Goal[] = [];
-
-    for (const tmpl of INITIAL_GOALS_TEMPLATE) {
-      // Insert Goal
-      try {
-        const goalData = await api.post('goals', {
-          title: tmpl.title,
-          category: tmpl.category,
-          priority: tmpl.priority,
-          description: tmpl.description,
-          progress: tmpl.progress,
-          status: tmpl.status
-        });
-
-        // Insert Activities
-        if (tmpl.activities.length > 0) {
-          // We have to insert one by one or generic bulk if API supports it. 
-          // Our API supports single insert. Ideally we add bulk insert later.
-          // For now, loop.
-          const actDataList = [];
-          for (const a of tmpl.activities) {
-            const act = await api.post('activities', {
-              goal_id: goalData.id,
-              name: a.name,
-              is_completed: a.isCompleted,
-              frequency: a.frequency
-            });
-            actDataList.push(act);
-          }
-
-          newGoals.push({
-            ...goalData,
-            activities: actDataList || []
-          });
-        } else {
-          newGoals.push({
-            ...goalData,
-            activities: []
-          });
-        }
-      } catch (err) {
-        console.error("Error seeding goal:", err);
-      }
-    }
-    setGoals(newGoals);
-  };
-
+  // Fetch Goals
   const fetchGoals = async () => {
     if (!user) return;
 
     try {
-      // Use helper that handles nested activities via backend specific logic
+      setLoading(true);
       const data = await fetchGoalsApi();
 
-      if (data && data.length > 0) {
+      if (Array.isArray(data)) {
         const loadedGoals = data.map((g: any) => {
           const activities = (g.activities || []).map((a: any) => ({
             ...a,
-            isCompleted: a.is_completed
+            isCompleted: a.is_completed // Handle DB naming convention
           }));
 
           const completedCount = activities.filter((a: Activity) => checkIsCompleted(a)).length;
           const computedProgress = activities.length > 0
             ? Math.round((completedCount / activities.length) * 100)
-            : 0;
+            : (g.progress || 0);
 
           return {
             ...g,
             activities,
-            progress: computedProgress, // Override DB value with fresh calculation
+            progress: computedProgress,
             status: computedProgress === 100 ? 'Completed' : (computedProgress === 0 ? 'Not Started' : 'In Progress')
           } as Goal;
         });
         setGoals(loadedGoals);
       } else {
-        // Auto-seed if empty
-        await seedInitialData();
+        setGoals([]);
       }
-    } catch (err) {
-      console.error("Error fetching goals:", err);
+    } catch (error) {
+      console.error("Error fetching goals:", error);
+      setGoals([]);
     } finally {
       setLoading(false);
     }

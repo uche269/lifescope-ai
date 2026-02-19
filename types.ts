@@ -1,12 +1,21 @@
-export enum GoalCategory {
-  PHYSICAL = 'Physical appearance',
-  HEALTH = 'Health, weight & diet',
-  SELF_DEV = 'Self development',
-  PERSONAL = 'Personal projects',
-  WORK = 'Work projects',
-  FAMILY = 'Family activities',
-  FINANCE = 'Finances',
-  RELOCATION = 'Relocation to Canada',
+export const DefaultGoalCategories = {
+  PHYSICAL: 'Physical appearance',
+  HEALTH: 'Health, weight & diet',
+  SELF_DEV: 'Self development',
+  PERSONAL: 'Personal projects',
+  WORK: 'Work projects',
+  FAMILY: 'Family activities',
+  FINANCE: 'Finances',
+  RELOCATION: 'Relocation to Canada',
+} as const;
+
+export type GoalCategory = string;
+
+export interface GoalCategoryItem {
+  id: string;
+  name: string;
+  color: string;
+  is_default: boolean;
 }
 
 export interface Activity {
