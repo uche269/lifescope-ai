@@ -56,7 +56,8 @@ export const api = {
 
 // Helper for Goals specifically since it has custom logic in backend
 export const fetchGoals = async () => {
-    const { data, error } = await api.get('goals', { select: '*, activities (*)', order: 'created_at.desc' });
-    if (error) throw new Error(error.message);
-    return data as Goal[];
+    // api.get already unwraps { data, error } from the backend response
+    const result = await api.get('goals', { select: '*, activities (*)', order: 'created_at.desc' });
+    // result is now the array directly (or an object if something went wrong)
+    return Array.isArray(result) ? result : (result?.data ?? []);
 };

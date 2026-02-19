@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { Goal, GoalCategory } from '../types';
 import { TrendingUp, CheckCircle2, AlertCircle, Sparkles, FileText, X, Download, LayoutTemplate, Target } from 'lucide-react';
-import { supabase } from '../lib/supabase';
+import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { generateAnnualReport } from '../services/geminiService';
 import { checkIsCompleted } from '../utils/activityUtils';
@@ -38,8 +38,9 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
 
   const overallProgress = useMemo(() => {
     if (goals.length === 0) return 0;
-    const total = goals.reduce((acc, g) => acc + g.progress, 0);
-    return Math.round(total / goals.length);
+    const total = goals.reduce((acc, g) => acc + (g.progress || 0), 0);
+    const result = Math.round(total / goals.length);
+    return isNaN(result) ? 0 : result;
   }, [goals]);
 
   const highPriorityGoals = goals.filter(g => g.priority === 'High');
@@ -78,13 +79,20 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
     setShowReportModal(true);
     setReportContent(null);
 
-    // Fetch Health Data from Supabase
-    const { data: healthLogs } = await supabase.from('weight_logs').select('*').order('date', { ascending: true });
-    const { data: measurements } = await supabase.from('measurements').select('*');
-    const { count: foodLogsCount } = await supabase.from('food_logs').select('*', { count: 'exact', head: true });
+    // Fetch Health Data via API
+    let healthLogs: any[] = [];
+    let measurementData: any[] = [];
+    let foodLogsCount = 0;
+    try {
+      healthLogs = await api.get('weight_logs', { orderBy: 'date', ascending: 'true' }) || [];
+      measurementData = await api.get('measurements', {}) || [];
+      const foodLogs = await api.get('food_logs', {}) || [];
+      foodLogsCount = foodLogs.length;
+    } catch (err) {
+      console.error('Error fetching health data for report:', err);
+    }
 
-    const healthData = healthLogs || [];
-    const measurementData = measurements || [];
+    const healthData = Array.isArray(healthLogs) ? healthLogs : [];
 
     const userData = {
       goals: goals.map(g => ({
