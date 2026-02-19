@@ -41,11 +41,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const checkUser = async () => {
     try {
-      const res = await fetch(`${API_URL}/auth/me`);
+      const res = await fetch(`${API_URL}/auth/me`, { credentials: 'include' });
       if (res.ok) {
         const data = await res.json();
-        setUser(data.user);
-        setPlanInfo(data.planInfo);
+        const u = data.user;
+        setUser(u);
+        // Plan info is embedded in the user object from /auth/me
+        if (u) {
+          setPlanInfo({
+            effectivePlan: u.effectivePlan || 'free',
+            aiCallsRemaining: u.aiCallsRemaining ?? 0,
+            aiCallsLimit: u.aiCallsLimit ?? 10,
+            trialActive: u.trialActive ?? false,
+            trialDaysLeft: u.trialDaysLeft ?? 0,
+            is_admin: u.is_admin ?? false
+          });
+        }
       } else {
         setUser(null);
         setPlanInfo(null);
@@ -69,10 +80,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signOut = async () => {
     try {
-      await fetch(`${API_URL}/auth/logout`, { method: 'POST' });
+      await fetch(`${API_URL}/auth/logout`, { method: 'POST', credentials: 'include' });
       setUser(null);
       setPlanInfo(null);
-      // Optional: Redirect to login
     } catch (error) {
       console.error("Logout failed:", error);
     }
@@ -88,6 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ email, password })
       });
 
@@ -111,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const res = await fetch(`${API_URL}/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify(formData)
       });
 
