@@ -25,6 +25,7 @@ const Settings: React.FC = () => {
     // Delete confirmation
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
     const [deleteInput, setDeleteInput] = useState('');
+    const [deleteLoading, setDeleteLoading] = useState(false);
     const [saved, setSaved] = useState(false);
 
     useEffect(() => {
@@ -48,6 +49,17 @@ const Settings: React.FC = () => {
             window.location.reload();
         } catch (e: any) {
             alert("Migration failed: " + e.message);
+        }
+    };
+
+    const handleDeleteAccount = async () => {
+        setDeleteLoading(true);
+        try {
+            await api.delete('auth/me');
+            await signOut(); // Force logout and wipe context
+        } catch (e: any) {
+            alert("Delete failed: " + e.message);
+            setDeleteLoading(false);
         }
     };
 
@@ -378,10 +390,11 @@ const Settings: React.FC = () => {
                                                         Cancel
                                                     </button>
                                                     <button
-                                                        disabled={deleteInput !== 'DELETE'}
+                                                        disabled={deleteInput !== 'DELETE' || deleteLoading}
+                                                        onClick={handleDeleteAccount}
                                                         className="px-3 py-1.5 bg-red-600 hover:bg-red-700 disabled:opacity-30 text-white rounded-lg text-xs font-medium transition-colors"
                                                     >
-                                                        Confirm Delete
+                                                        {deleteLoading ? 'Deleting...' : 'Confirm Delete'}
                                                     </button>
                                                 </div>
                                             </div>

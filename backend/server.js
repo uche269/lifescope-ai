@@ -428,39 +428,99 @@ app.post('/api/auth/logout', (req, res) => {
 
 app.get('/api/auth/me', async (req, res) => {
     if (req.isAuthenticated()) {
-        // Fetch fresh user data with plan info
-        const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
-        const user = rows[0];
+        try {
+            const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
+            if (rows.length > 0) {
+                return res.json({ user: rows[0] });
+            }
+        } catch (err) {
+            console.error(err);
+        }
+    }
+    res.status(401).json({ error: 'Not authenticated' });
+});
 
-        // Reset daily AI counter if needed
-        const today = new Date().toISOString().split('T')[0];
-        if (user.ai_calls_reset_at?.toISOString?.()?.split('T')[0] !== today) {
-            await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, today]);
-            user.ai_calls_today = 0;
+// Delete account
+app.delete('/api/auth/me', ensureAuth, async (req, res) => {
+    try {
+        const userId = req.user.id;
+        const userEmail = req.user.email;
+        const userName = req.user.full_name || 'User';
+
+        // Delete from database (Cascade should handle related records if DB is setup right)
+        await pool.query('DELETE FROM public.users WHERE id = $1', [userId]);
+
+        // Trigger Admin Alert
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
+
+        // Use Resend to notify admin
+        if (req.user.email) {
+            try {
+                // Send alert to admin via Resend
+                const alertEmail = adminEmail || 'onboarding@resend.dev'; // Fallback if no admin email
+                await resend.emails.send({
+                    from: 'LifeScope AI Alerts <onboarding@resend.dev>',
+                    to: alertEmail,
+                    subject: '🚨 User Account Deleted',
+                    html: `<h2>Account Deletion Alert</h2>
+                           <p>The following user has just deleted their LifeScope account:</p>
+                           <ul>
+                             <li><strong>Name:</strong> ${userName}</li>
+                             <li><strong>Email:</strong> ${userEmail}</li>
+                             <li><strong>User ID:</strong> ${userId}</li>
+                             <li><strong>Time:</strong> ${new Date().toISOString()}</li>
+                           </ul>`
+                });
+                console.log(`✅ Admin alerted of account deletion: ${userEmail}`);
+            } catch (emailErr) {
+                console.error('❌ Failed to send deletion alert email:', emailErr);
+            }
         }
 
-        // Determine effective plan (trial = pro features)
-        const now = new Date();
-        const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
-        const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
-
-        // AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
-        const limits = { free: 10, pro: 50, premium: 999999 };
-        const aiLimit = limits[effectivePlan] ?? 10;
-
-        res.json({
-            user: {
-                ...user,
-                effectivePlan,
-                aiCallsRemaining: Math.max(0, aiLimit - (user.ai_calls_today || 0)),
-                aiCallsLimit: aiLimit,
-                trialActive: !!inTrial,
-                trialDaysLeft: inTrial ? Math.ceil((new Date(user.trial_ends_at) - now) / (1000 * 60 * 60 * 24)) : 0
-            }
+        // Logout user session
+        req.logout((err) => {
+            if (err) return res.status(500).json({ error: 'Failed to clear session after deletion' });
+            res.json({ success: true, message: 'Account deleted successfully' });
         });
-    } else {
-        res.status(401).json({ user: null });
+
+    } catch (err) {
+        console.error('Delete account error:', err);
+        res.status(500).json({ error: 'Server error during deletion' });
     }
+});
+// Fetch fresh user data with plan info
+const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
+const user = rows[0];
+
+// Reset daily AI counter if needed
+const today = new Date().toISOString().split('T')[0];
+if (user.ai_calls_reset_at?.toISOString?.()?.split('T')[0] !== today) {
+    await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, today]);
+    user.ai_calls_today = 0;
+}
+
+// Determine effective plan (trial = pro features)
+const now = new Date();
+const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
+const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
+
+// AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
+const limits = { free: 10, pro: 50, premium: 999999 };
+const aiLimit = limits[effectivePlan] ?? 10;
+
+res.json({
+    user: {
+        ...user,
+        effectivePlan,
+        aiCallsRemaining: Math.max(0, aiLimit - (user.ai_calls_today || 0)),
+        aiCallsLimit: aiLimit,
+        trialActive: !!inTrial,
+        trialDaysLeft: inTrial ? Math.ceil((new Date(user.trial_ends_at) - now) / (1000 * 60 * 60 * 24)) : 0
+    }
+});
+    } else {
+    res.status(401).json({ user: null });
+}
 });
 
 app.post('/api/auth/logout', (req, res) => {
