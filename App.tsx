@@ -119,7 +119,7 @@ const MainApp: React.FC = () => {
 
           <footer className="mt-12 border-t border-slate-900 pt-6 text-center text-slate-600 text-sm">
             <p className="mb-2">What do you want to add, review, or improve today?</p>
-            <p className="text-xs opacity-50">LifeScope AI v2.0 • Built with Gemini</p>
+            <p className="text-xs opacity-50">LifeScope AI</p>
           </footer>
         </div>
       </main>

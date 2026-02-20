@@ -390,7 +390,7 @@ export const improveDietPlan = async (currentPlan: string, goal: string) => {
 
 export const chatWithSupport = async (
   message: string,
-  userContext: { userName: string; plan: string; trialActive: boolean; trialDaysLeft: number },
+  userContext: { userName: string; plan: string; trialActive: boolean; trialDaysLeft: number; weightLogs?: string },
   chatHistory: { role: string; text: string }[]
 ) => {
   try {
@@ -405,6 +405,7 @@ export const chatWithSupport = async (
     const systemPrompt = `You are the LifeScope AI assistant. You help users navigate the LifeScope app and answer questions about their data and features.
 
 User Info: Name is ${userContext.userName}, Plan: ${userContext.plan}, Trial Active: ${userContext.trialActive}, Trial Days Left: ${userContext.trialDaysLeft}.
+${userContext.weightLogs ? `Recent Weight Logs: ${userContext.weightLogs}` : ''}
 
 App Features:
 - Dashboard: Overview of goals and progress

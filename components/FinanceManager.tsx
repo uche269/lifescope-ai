@@ -304,24 +304,28 @@ const FinanceManager: React.FC = () => {
                             <h3 className="text-sm font-semibold text-slate-400 mb-4 flex items-center gap-2">
                                 <TrendingDown className="w-4 h-4" /> Daily Spending Trend
                             </h3>
-                            <ResponsiveContainer width="100%" height={280}>
-                                <AreaChart data={trendData}>
-                                    <defs>
-                                        <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">
-                                            <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                                            <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
-                                        </linearGradient>
-                                    </defs>
-                                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                                    <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 11 }} />
-                                    <YAxis stroke="#64748b" tick={{ fontSize: 11 }} tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`} />
-                                    <Tooltip
-                                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }}
-                                        formatter={(value: number) => `₦${value.toLocaleString()}`}
-                                    />
-                                    <Area type="monotone" dataKey="amount" stroke="#6366f1" fill="url(#spendGradient)" strokeWidth={2} />
-                                </AreaChart>
-                            </ResponsiveContainer>
+                            <div className="overflow-x-auto custom-scrollbar">
+                                <div style={{ minWidth: '600px', height: '280px' }}>
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <AreaChart data={trendData}>
+                                            <defs>
+                                                <linearGradient id="spendGradient" x1="0" y1="0" x2="0" y2="1">
+                                                    <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
+                                                    <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                                                </linearGradient>
+                                            </defs>
+                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                                            <XAxis dataKey="date" stroke="#64748b" tick={{ fontSize: 11 }} />
+                                            <YAxis stroke="#64748b" tick={{ fontSize: 11 }} tickFormatter={(v) => `₦${(v / 1000).toFixed(0)}k`} />
+                                            <Tooltip
+                                                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px' }}
+                                                formatter={(value: number) => `₦${value.toLocaleString()}`}
+                                            />
+                                            <Area type="monotone" dataKey="amount" stroke="#6366f1" fill="url(#spendGradient)" strokeWidth={2} />
+                                        </AreaChart>
+                                    </ResponsiveContainer>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

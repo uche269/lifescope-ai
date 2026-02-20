@@ -18,6 +18,8 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const pdfParse = require('pdf-parse');
 import compression from 'compression';
+import { Resend } from 'resend';
+import cron from 'node-cron';
 
 dotenv.config();
 
@@ -38,6 +40,9 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Resend Email Client
+const resend = new Resend(process.env.RESEND_API_KEY || 're_placeholder');
 
 // Database Connection
 const pool = new pg.Pool({
@@ -1168,6 +1173,68 @@ if (process.env.NODE_ENV === 'production') {
         res.sendFile(path.join(__dirname, '../dist/index.html'));
     });
 }
+
+// ============================
+// AUTOMATED MONTHLY EMAILS
+// ============================
+
+// Helper function to send monthly summary
+const sendMonthlySummaries = async () => {
+    try {
+        console.log("⏳ Starting monthly cron job for email summaries...");
+
+        // Find all users
+        const { rows: users } = await pool.query('SELECT id, email, full_name FROM public.users');
+
+        for (const user of users) {
+            // Get incomplete goals
+            const { rows: goals } = await pool.query(
+                'SELECT title, progress, target FROM public.goals WHERE user_id = $1 AND progress < target',
+                [user.id]
+            );
+
+            if (goals.length > 0) {
+                const goalListHtml = goals.map(g => `<li><strong>${g.title}</strong>: ${g.progress} / ${g.target}</li>`).join('');
+
+                try {
+                    await resend.emails.send({
+                        from: 'LifeScope AI <onboarding@resend.dev>', // Use verified domain in prod
+                        to: user.email,
+                        subject: 'Your Monthly LifeScope Report',
+                        html: `<h2>Hello ${user.full_name || 'there'}!</h2>
+                               <p>Here is your monthly check-in from LifeScope AI. You have some active goals waiting for your attention:</p>
+                               <ul>${goalListHtml}</ul>
+                               <p>Log in to update your progress and keep up the great work!</p>
+                               <br/>
+                               <p>Best regards,<br/>LifeScope AI</p>`
+                    });
+                    console.log(`✅ Monthly email sent to ${user.email}`);
+                } catch (emailErr) {
+                    console.error(`❌ Failed to send email to ${user.email}:`, emailErr);
+                }
+            }
+        }
+    } catch (err) {
+        console.error("❌ Cron job failed:", err);
+    }
+};
+
+// Schedule Cron Job: Runs at 09:00 AM on the 1st of every month
+// '0 9 1 * *' means: Minute 0, Hour 9, Day 1 of Month, Every Month, Every Day of Week
+cron.schedule('0 9 1 * *', () => {
+    sendMonthlySummaries();
+});
+
+// Manual trigger route for testing or AI invocation
+app.post('/api/email/trigger-monthly', ensureAuth, ensureAdmin, async (req, res) => {
+    try {
+        // Run it asynchronously in the background so the request doesn't hang
+        sendMonthlySummaries();
+        res.json({ success: true, message: "Monthly summary generation triggered." });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 
 app.listen(PORT, () => {

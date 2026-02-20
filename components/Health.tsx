@@ -542,22 +542,24 @@ const Health: React.FC = () => {
                                     </div>
                                 </div>
 
-                                <div className="h-64 w-full mb-4">
-                                    <ResponsiveContainer width="100%" height="100%">
-                                        <AreaChart data={chartData}>
-                                            <defs>
-                                                <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
-                                                    <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3} />
-                                                    <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
-                                                </linearGradient>
-                                            </defs>
-                                            <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                                            <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                            <YAxis domain={['auto', 'auto']} stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
-                                            <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }} />
-                                            <Area type="monotone" dataKey="weight" stroke="#818cf8" strokeWidth={2} fillOpacity={1} fill="url(#weightGradient)" />
-                                        </AreaChart>
-                                    </ResponsiveContainer>
+                                <div className="h-64 w-full mb-4 overflow-x-auto custom-scrollbar">
+                                    <div style={{ minWidth: '600px', height: '100%' }}>
+                                        <ResponsiveContainer width="100%" height="100%">
+                                            <AreaChart data={chartData}>
+                                                <defs>
+                                                    <linearGradient id="weightGradient" x1="0" y1="0" x2="0" y2="1">
+                                                        <stop offset="5%" stopColor="#818cf8" stopOpacity={0.3} />
+                                                        <stop offset="95%" stopColor="#818cf8" stopOpacity={0} />
+                                                    </linearGradient>
+                                                </defs>
+                                                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                                                <XAxis dataKey="name" stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                                <YAxis domain={['auto', 'auto']} stroke="#64748b" tick={{ fill: '#64748b', fontSize: 12 }} axisLine={false} tickLine={false} />
+                                                <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }} />
+                                                <Area type="monotone" dataKey="weight" stroke="#818cf8" strokeWidth={2} fillOpacity={1} fill="url(#weightGradient)" />
+                                            </AreaChart>
+                                        </ResponsiveContainer>
+                                    </div>
                                 </div>
                             </div>
 

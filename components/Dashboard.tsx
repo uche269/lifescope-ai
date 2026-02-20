@@ -454,40 +454,42 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
             <span className="text-xs text-slate-500 bg-slate-900 px-2 py-1 rounded">Avg. Progress per Category</span>
           </div>
 
-          <div className="h-64 w-full">
+          <div className="h-64 w-full overflow-x-auto custom-scrollbar">
             {categoryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={categoryData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    stroke="#64748b"
-                    tick={{ fill: '#94a3b8', fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    interval={0}
-                  />
-                  <YAxis
-                    stroke="#64748b"
-                    tick={{ fill: '#64748b', fontSize: 11 }}
-                    axisLine={false}
-                    tickLine={false}
-                    domain={[0, 100]}
-                  />
-                  <Tooltip
-                    cursor={{ fill: '#1e293b', opacity: 0.4 }}
-                    contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
-                    itemStyle={{ color: '#818cf8' }}
-                    formatter={(value: number) => [`${value}%`, 'Avg Progress']}
-                  />
-                  <Legend wrapperStyle={{ paddingTop: '10px' }} />
-                  <Bar dataKey="avgProgress" name="Avg. Progress %" radius={[4, 4, 0, 0]}>
-                    {categoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.avgProgress === 100 ? '#10b981' : '#6366f1'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <div style={{ minWidth: '600px', height: '100%' }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={categoryData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      stroke="#64748b"
+                      tick={{ fill: '#94a3b8', fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      interval={0}
+                    />
+                    <YAxis
+                      stroke="#64748b"
+                      tick={{ fill: '#64748b', fontSize: 11 }}
+                      axisLine={false}
+                      tickLine={false}
+                      domain={[0, 100]}
+                    />
+                    <Tooltip
+                      cursor={{ fill: '#1e293b', opacity: 0.4 }}
+                      contentStyle={{ backgroundColor: '#0f172a', borderColor: '#334155', color: '#fff' }}
+                      itemStyle={{ color: '#818cf8' }}
+                      formatter={(value: number) => [`${value}%`, 'Avg Progress']}
+                    />
+                    <Legend wrapperStyle={{ paddingTop: '10px' }} />
+                    <Bar dataKey="avgProgress" name="Avg. Progress %" radius={[4, 4, 0, 0]}>
+                      {categoryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.avgProgress === 100 ? '#10b981' : '#6366f1'} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             ) : (
               <div className="h-full flex flex-col items-center justify-center text-slate-500">
                 <p>No active goals found.</p>

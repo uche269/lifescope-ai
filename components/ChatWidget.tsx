@@ -3,6 +3,7 @@ import { MessageCircle, X, Send, AlertCircle, Loader2, Minus, Maximize2 } from '
 import { useAuth } from '../contexts/AuthContext';
 import { chatWithSupport } from '../services/geminiService';
 import { chatFAQ } from '../services/chatFAQ';
+import { api } from '../services/api';
 
 interface ChatMessage {
     role: 'user' | 'assistant';
@@ -64,11 +65,20 @@ const ChatWidget: React.FC = () => {
                 responseText = faqAnswer;
             } else {
                 // Fall back to AI
+                let weightContext = '';
+                try {
+                    const weightData = await api.get('weight_logs', { orderBy: 'date', ascending: 'false' });
+                    if (Array.isArray(weightData) && weightData.length > 0) {
+                        weightContext = weightData.slice(0, 30).map((w: any) => `${w.date}: ${w.weight}kg`).join(', ');
+                    }
+                } catch (e) { console.error('Error fetching chat context', e); }
+
                 const context = {
                     userName: user?.full_name || 'User',
                     plan: planInfo?.effectivePlan || 'free',
                     trialActive: planInfo?.trialActive || false,
-                    trialDaysLeft: planInfo?.trialDaysLeft || 0
+                    trialDaysLeft: planInfo?.trialDaysLeft || 0,
+                    weightLogs: weightContext
                 };
                 responseText = await chatWithSupport(input.trim(), context, messages);
             }
