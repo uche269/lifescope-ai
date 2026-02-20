@@ -426,20 +426,6 @@ app.post('/api/auth/logout', (req, res) => {
     });
 });
 
-app.get('/api/auth/me', async (req, res) => {
-    if (req.isAuthenticated()) {
-        try {
-            const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
-            if (rows.length > 0) {
-                return res.json({ user: rows[0] });
-            }
-        } catch (err) {
-            console.error(err);
-        }
-    }
-    res.status(401).json({ error: 'Not authenticated' });
-});
-
 // Delete account
 app.delete('/api/auth/me', ensureAuth, async (req, res) => {
     try {
@@ -447,17 +433,15 @@ app.delete('/api/auth/me', ensureAuth, async (req, res) => {
         const userEmail = req.user.email;
         const userName = req.user.full_name || 'User';
 
-        // Delete from database (Cascade should handle related records if DB is setup right)
+        // Delete from database
         await pool.query('DELETE FROM public.users WHERE id = $1', [userId]);
 
         // Trigger Admin Alert
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
 
-        // Use Resend to notify admin
         if (req.user.email) {
             try {
-                // Send alert to admin via Resend
-                const alertEmail = adminEmail || 'onboarding@resend.dev'; // Fallback if no admin email
+                const alertEmail = adminEmail || 'onboarding@resend.dev';
                 await resend.emails.send({
                     from: 'LifeScope AI Alerts <onboarding@resend.dev>',
                     to: alertEmail,
@@ -477,7 +461,6 @@ app.delete('/api/auth/me', ensureAuth, async (req, res) => {
             }
         }
 
-        // Logout user session
         req.logout((err) => {
             if (err) return res.status(500).json({ error: 'Failed to clear session after deletion' });
             res.json({ success: true, message: 'Account deleted successfully' });
@@ -488,39 +471,47 @@ app.delete('/api/auth/me', ensureAuth, async (req, res) => {
         res.status(500).json({ error: 'Server error during deletion' });
     }
 });
-// Fetch fresh user data with plan info
-const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
-const user = rows[0];
 
-// Reset daily AI counter if needed
-const today = new Date().toISOString().split('T')[0];
-if (user.ai_calls_reset_at?.toISOString?.()?.split('T')[0] !== today) {
-    await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, today]);
-    user.ai_calls_today = 0;
-}
+app.get('/api/auth/me', async (req, res) => {
+    if (req.isAuthenticated()) {
+        try {
+            // Fetch fresh user data with plan info
+            const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
+            const user = rows[0];
 
-// Determine effective plan (trial = pro features)
-const now = new Date();
-const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
-const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
+            // Reset daily AI counter if needed
+            const today = new Date().toISOString().split('T')[0];
+            if (user.ai_calls_reset_at?.toISOString?.()?.split('T')[0] !== today) {
+                await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, today]);
+                user.ai_calls_today = 0;
+            }
 
-// AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
-const limits = { free: 10, pro: 50, premium: 999999 };
-const aiLimit = limits[effectivePlan] ?? 10;
+            // Determine effective plan (trial = pro features)
+            const now = new Date();
+            const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
+            const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
 
-res.json({
-    user: {
-        ...user,
-        effectivePlan,
-        aiCallsRemaining: Math.max(0, aiLimit - (user.ai_calls_today || 0)),
-        aiCallsLimit: aiLimit,
-        trialActive: !!inTrial,
-        trialDaysLeft: inTrial ? Math.ceil((new Date(user.trial_ends_at) - now) / (1000 * 60 * 60 * 24)) : 0
-    }
-});
+            // AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
+            const limits = { free: 10, pro: 50, premium: 999999 };
+            const aiLimit = limits[effectivePlan] ?? 10;
+
+            res.json({
+                user: {
+                    ...user,
+                    effectivePlan,
+                    aiCallsRemaining: Math.max(0, aiLimit - (user.ai_calls_today || 0)),
+                    aiCallsLimit: aiLimit,
+                    trialActive: !!inTrial,
+                    trialDaysLeft: inTrial ? Math.ceil((new Date(user.trial_ends_at) - now) / (1000 * 60 * 60 * 24)) : 0
+                }
+            });
+        } catch (err) {
+            console.error(err);
+            res.status(500).json({ error: 'Server error' });
+        }
     } else {
-    res.status(401).json({ user: null });
-}
+        res.status(401).json({ error: 'Not authenticated' });
+    }
 });
 
 app.post('/api/auth/logout', (req, res) => {
