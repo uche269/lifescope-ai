@@ -1,5 +1,6 @@
 import express from 'express';
 import session from 'express-session';
+import crypto from 'crypto';
 import passport from 'passport';
 import { Strategy as GoogleStrategy } from 'passport-google-oauth20';
 import { Strategy as LocalStrategy } from 'passport-local';
@@ -87,7 +88,8 @@ const initDb = async () => {
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS trial_ends_at TIMESTAMP WITH TIME ZONE;`);
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT false;`);
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS last_login TIMESTAMP WITH TIME ZONE;`);
-
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false;`);
+        await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS verification_token TEXT;`);
 
         // Finance tables
         await pool.query(`
@@ -247,8 +249,8 @@ passport.use(new GoogleStrategy({
                 trialEnd.setDate(trialEnd.getDate() + 7);
 
                 const result = await pool.query(
-                    `INSERT INTO public.users (email, full_name, avatar_url, google_id, plan, trial_ends_at, last_login) 
-                     VALUES ($1, $2, $3, $4, 'free', $5, NOW()) RETURNING *`,
+                    `INSERT INTO public.users (email, full_name, avatar_url, google_id, plan, trial_ends_at, last_login, is_verified) 
+                     VALUES ($1, $2, $3, $4, 'free', $5, NOW(), true) RETURNING *`,
                     [email, profile.displayName, profile.photos[0]?.value, googleId, trialEnd]
                 );
                 rows = result.rows;
@@ -256,10 +258,11 @@ passport.use(new GoogleStrategy({
             } else {
                 // 3. Update last login and google_id if missing
                 await pool.query(
-                    `UPDATE public.users SET last_login = NOW(), google_id = COALESCE(google_id, $2) WHERE id = $1`,
+                    `UPDATE public.users SET last_login = NOW(), google_id = COALESCE(google_id, $2), is_verified = true WHERE id = $1`,
                     [rows[0].id, googleId]
                 );
                 rows[0].last_login = new Date();
+                rows[0].is_verified = true;
             }
 
             return done(null, rows[0]);
@@ -285,6 +288,10 @@ passport.use(new LocalStrategy({
 
         if (!user.password_hash) {
             return done(null, false, { message: 'Please log in with Google.' });
+        }
+
+        if (!user.is_verified) {
+            return done(null, false, { message: 'Please check your email to verify your account before logging in.' });
         }
 
         const isMatch = await bcrypt.compare(password, user.password_hash);
@@ -335,23 +342,62 @@ app.post('/api/auth/register', async (req, res) => {
         // Create user
         const trialEnd = new Date();
         trialEnd.setDate(trialEnd.getDate() + 7);
+        const token = crypto.randomBytes(32).toString('hex');
 
         const { rows } = await pool.query(
-            `INSERT INTO public.users (email, password_hash, full_name, phone, plan, trial_ends_at, last_login) 
-             VALUES ($1, $2, $3, $4, 'free', $5, NOW()) RETURNING *`,
-            [email, passwordHash, fullName, phone, trialEnd]
+            `INSERT INTO public.users (email, password_hash, full_name, phone, plan, trial_ends_at, last_login, is_verified, verification_token) 
+             VALUES ($1, $2, $3, $4, 'free', $5, NOW(), false, $6) RETURNING *`,
+            [email, passwordHash, fullName, phone, trialEnd, token]
         );
 
         const user = rows[0];
 
-        // Auto login
-        req.login(user, (err) => {
-            if (err) throw err;
-            res.json({ user });
-        });
+        // Send Verification Email
+        try {
+            const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+            const verifyLink = `${frontendUrl}/login?verify=${token}`;
+            await resend.emails.send({
+                from: 'LifeScope AI <onboarding@resend.dev>', // Use verified domain in prod
+                to: email,
+                subject: 'Verify your LifeScope AI Account',
+                html: `<h2>Welcome to LifeScope AI, ${fullName}!</h2>
+                       <p>Please click the link below to verify your email address and activate your account:</p>
+                       <p><a href="${verifyLink}" style="padding:10px 20px;background:#4f46e5;color:white;text-decoration:none;border-radius:5px;">Verify My Account</a></p>
+                       <p>If you did not request this, please ignore this email.</p>
+                       <br/>
+                       <p>Best regards,<br/>LifeScope AI</p>`
+            });
+            console.log(`✅ Verification email sent to ${email}`);
+        } catch (emailErr) {
+            console.error('❌ Failed to send verification email:', emailErr);
+        }
+
+        res.json({ message: 'Registration successful! Please check your email to verify your account.' });
 
     } catch (err) {
         console.error('Registration error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Verify Email
+app.post('/api/auth/verify', async (req, res) => {
+    try {
+        const { token } = req.body;
+        if (!token) return res.status(400).json({ error: "No token provided." });
+
+        const { rows } = await pool.query(
+            'UPDATE public.users SET is_verified = true, verification_token = NULL WHERE verification_token = $1 RETURNING id',
+            [token]
+        );
+
+        if (rows.length === 0) {
+            return res.status(400).json({ error: "Invalid or expired verification link." });
+        }
+
+        res.json({ success: true, message: "Email successfully verified! You can now log in." });
+    } catch (err) {
+        console.error('Verification error:', err);
         res.status(500).json({ error: 'Server error' });
     }
 });

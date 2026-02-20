@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { BrainCircuit, Lock, Mail, ArrowRight, AlertCircle, CheckCircle2, User, Phone, Key } from 'lucide-react';
 
@@ -7,6 +7,7 @@ const Login: React.FC = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
     // Form State
     const [email, setEmail] = useState('');
@@ -18,14 +19,24 @@ const Login: React.FC = () => {
         e.preventDefault();
         setLoading(true);
         setError(null);
+        setSuccessMessage(null);
 
         try {
             if (isLogin) {
                 const { error } = await signInWithEmail(email, password);
                 if (error) throw error;
             } else {
-                const { error } = await registerWithEmail({ email, password, fullName, phone });
+                const { error, message } = await registerWithEmail({ email, password, fullName, phone });
                 if (error) throw error;
+                if (message) {
+                    setSuccessMessage(message);
+                    setIsLogin(true); // Switch to login view
+                    // Clear form
+                    setEmail('');
+                    setPassword('');
+                    setFullName('');
+                    setPhone('');
+                }
             }
         } catch (err: any) {
             setError(err.message || 'Authentication failed');
@@ -33,6 +44,38 @@ const Login: React.FC = () => {
             setLoading(false);
         }
     };
+
+    // Handle incoming verification token from URL
+    useEffect(() => {
+        const verifyEmailToken = async () => {
+            const params = new URLSearchParams(window.location.search);
+            const token = params.get('verify');
+            if (token) {
+                setLoading(true);
+                try {
+                    const res = await fetch('/api/auth/verify', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token })
+                    });
+                    const data = await res.json();
+
+                    if (!res.ok) {
+                        setError(data.error || 'Verification failed');
+                    } else {
+                        setSuccessMessage(data.message || 'Email verified! Please log in.');
+                    }
+                } catch (err) {
+                    setError('Network error during verification');
+                } finally {
+                    setLoading(false);
+                    // Clear the token from the URL bar visually without reloading
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                }
+            }
+        };
+        verifyEmailToken();
+    }, []);
 
     return (
         <div className="min-h-screen flex items-center justify-center bg-slate-950 p-4 relative overflow-hidden">
@@ -69,6 +112,13 @@ const Login: React.FC = () => {
                     <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 mb-6 flex items-start gap-3 text-left animate-shake">
                         <AlertCircle className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
                         <p className="text-sm text-red-300">{error}</p>
+                    </div>
+                )}
+
+                {successMessage && (
+                    <div className="bg-emerald-500/10 border border-emerald-500/20 rounded-xl p-3 mb-6 flex items-start gap-3 text-left animate-fade-in">
+                        <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0 mt-0.5" />
+                        <p className="text-sm text-emerald-300">{successMessage}</p>
                     </div>
                 )}
 

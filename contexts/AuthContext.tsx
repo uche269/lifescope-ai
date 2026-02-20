@@ -19,7 +19,7 @@ interface AuthContextType {
   signOut: () => Promise<void>;
   signInWithGoogle: () => void;
   signInWithEmail: (email: string, password: string) => Promise<{ error: any }>;
-  registerWithEmail: (data: any) => Promise<{ error: any }>;
+  registerWithEmail: (data: any) => Promise<{ error: any, message?: string }>;
   refreshUser: () => Promise<void>;
 }
 
@@ -132,9 +132,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { error: { message: data.error || 'Registration failed' } };
       }
 
-      setUser(data.user);
-      await checkUser();
-      return { error: null };
+      // Do NOT set user or auto-login. Expect them to verify email.
+      return { error: null, message: data.message };
     } catch (error: any) {
       return { error: { message: error.message || 'Network error' } };
     }
