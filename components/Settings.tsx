@@ -251,22 +251,27 @@ const Settings: React.FC = () => {
                             </div>
 
                             {[
-                                { key: 'goalReminders' as const, label: 'Goal Reminders', desc: 'Get notified when goal deadlines approach', icon: Bell },
-                                { key: 'trialExpiry' as const, label: 'Trial & Plan Alerts', desc: 'Notifications about trial expiry and plan changes', icon: ShieldCheck },
-                                { key: 'weeklyDigest' as const, label: 'Weekly Digest Email', desc: 'Receive a weekly summary of your progress', icon: Mail },
-                                { key: 'aiInsights' as const, label: 'AI Insights', desc: 'Proactive health and finance suggestions', icon: Sparkles }
+                                { key: 'goalReminders' as const, label: 'Goal Reminders', desc: 'Get notified when goal deadlines approach', icon: Bell, comingSoon: false },
+                                { key: 'trialExpiry' as const, label: 'Trial & Plan Alerts', desc: 'Notifications about trial expiry and plan changes', icon: ShieldCheck, comingSoon: false },
+                                { key: 'weeklyDigest' as const, label: 'Weekly Digest Email', desc: 'Receive a weekly summary of your progress via email', icon: Mail, comingSoon: true },
+                                { key: 'aiInsights' as const, label: 'AI Insights', desc: 'Proactive health and finance suggestions powered by AI', icon: Sparkles, comingSoon: true }
                             ].map(notif => (
                                 <div key={notif.key} className="flex items-center justify-between py-3">
                                     <div className="flex items-center gap-3">
                                         <notif.icon className="w-5 h-5 text-slate-400" />
                                         <div>
-                                            <p className="text-sm font-medium text-white">{notif.label}</p>
+                                            <p className="text-sm font-medium text-white flex items-center gap-2">
+                                                {notif.label}
+                                                {notif.comingSoon && (
+                                                    <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/15 text-amber-400 rounded-full font-semibold">Coming Soon</span>
+                                                )}
+                                            </p>
                                             <p className="text-xs text-slate-500">{notif.desc}</p>
                                         </div>
                                     </div>
                                     <button
-                                        onClick={() => setNotifications(prev => ({ ...prev, [notif.key]: !prev[notif.key] }))}
-                                        className={`relative w-12 h-7 rounded-full transition-colors ${notifications[notif.key]
+                                        onClick={() => !notif.comingSoon && setNotifications(prev => ({ ...prev, [notif.key]: !prev[notif.key] }))}
+                                        className={`relative w-12 h-7 rounded-full transition-colors ${notif.comingSoon ? 'opacity-40 cursor-not-allowed' : ''} ${notifications[notif.key]
                                             ? 'bg-indigo-600'
                                             : 'bg-slate-700'
                                             }`}
@@ -311,7 +316,10 @@ const Settings: React.FC = () => {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <p className="text-sm font-medium text-white">Export Your Data</p>
-                                            <p className="text-xs text-slate-500 mt-1">Download all your LifeScope data as JSON</p>
+                                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                                                Download a complete copy of all your LifeScope data — goals, health logs, finance records,
+                                                and chat history — as a JSON file for your personal records.
+                                            </p>
                                         </div>
                                         <button className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors">
                                             Export
@@ -343,7 +351,11 @@ const Settings: React.FC = () => {
                                                 <Sparkles className="w-4 h-4 text-indigo-400" />
                                                 Recover Legacy Data
                                             </p>
-                                            <p className="text-xs text-slate-500 mt-1">If you can't see your data after the update, click here.</p>
+                                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                                                If you originally used LifeScope before our migration to a new database, this will
+                                                attempt to recover your old goals, activities, and health data from the previous system.
+                                                You only need to use this once after the migration.
+                                            </p>
                                         </div>
                                         <button
                                             onClick={handleMigrate}

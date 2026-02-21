@@ -17,7 +17,8 @@ import {
     Stethoscope,
     Send,
     Loader2,
-    Trash2
+    Trash2,
+    HeartPulse
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { WeightLog, BodyMeasurement, FoodLog, MealPlanPreferences } from '../types';
@@ -31,6 +32,16 @@ const Health: React.FC = () => {
     const [loading, setLoading] = useState(false);
     // Admins and premium users have full AI access
     const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free' && !user?.is_admin;
+
+    // Health Disclaimer
+    const [showDisclaimer, setShowDisclaimer] = useState(() => {
+        return !localStorage.getItem('ls_health_disclaimer_accepted');
+    });
+
+    const acceptDisclaimer = () => {
+        localStorage.setItem('ls_health_disclaimer_accepted', 'true');
+        setShowDisclaimer(false);
+    };
 
     // --- Metrics State ---
     const [weightLogs, setWeightLogs] = useState<WeightLog[]>([]);
@@ -371,18 +382,70 @@ const Health: React.FC = () => {
 
     return (
         <div className="space-y-6">
+
+            {/* ====== MEDICAL DISCLAIMER MODAL ====== */}
+            {showDisclaimer && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl max-w-md w-full p-8 shadow-2xl space-y-5 animate-page-enter">
+                        <div className="flex justify-center">
+                            <div className="w-16 h-16 bg-gradient-to-br from-emerald-400 to-teal-500 rounded-full flex items-center justify-center">
+                                <HeartPulse className="w-8 h-8 text-white" />
+                            </div>
+                        </div>
+                        <h3 className="text-xl font-bold text-center" style={{ color: '#1e293b' }}>Hi, and welcome!</h3>
+                        <div className="text-sm space-y-3" style={{ color: '#475569' }}>
+                            <p>
+                                Just a quick reminder: the content available on LifeScope AI, whether in the form of health insights,
+                                meal plans, or other written content, is for <strong>general informational purposes only</strong>.
+                                It is not medical advice, diagnosis, or treatment, or a substitute for them from a qualified
+                                health care provider familiar with your unique story.
+                            </p>
+                            <p>
+                                You should not use the information, resources, or tools on our app to self-diagnose or
+                                self-treat any health-related conditions.
+                            </p>
+                            <p>
+                                <strong>Always seek the advice of a physician or qualified health provider</strong> with any questions
+                                you may have regarding a medical condition or treatment.
+                            </p>
+                            <p>
+                                Never disregard professional medical advice or delay seeking it because of something you have
+                                read on LifeScope AI!
+                            </p>
+                        </div>
+                        <button
+                            onClick={acceptDisclaimer}
+                            className="w-full py-3 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white font-bold rounded-xl transition-all shadow-lg"
+                        >
+                            I understand, let's get started!
+                        </button>
+                    </div>
+                </div>
+            )}
+
             <header className="flex justify-between items-center">
                 <div>
                     <h2 className="text-2xl font-bold text-white">Health & Nutrition</h2>
                     <p className="text-slate-400 text-sm">Track metrics, log meals, and plan your diet.</p>
                 </div>
-                <button
-                    onClick={fetchHealthData}
-                    className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors"
-                    title="Refresh Data from Supabase"
-                >
-                    <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                </button>
+                <div className="flex items-center gap-3">
+                    {/* AI Credits Indicator */}
+                    {planInfo && (
+                        <div className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 border border-indigo-500/20 rounded-full" title="AI Credits Remaining">
+                            <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
+                            <span className="text-xs font-medium text-indigo-300">
+                                {planInfo.aiCallsRemaining}/{planInfo.aiCallsLimit} credits
+                            </span>
+                        </div>
+                    )}
+                    <button
+                        onClick={fetchHealthData}
+                        className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition-colors"
+                        title="Refresh Data"
+                    >
+                        <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                    </button>
+                </div>
             </header>
 
             {/* Tabs */}
