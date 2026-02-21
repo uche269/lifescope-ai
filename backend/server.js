@@ -167,6 +167,9 @@ initDb();
 // Session Store
 const PgSession = connectPgSimple(session);
 
+// Trust Caddy reverse proxy for correct HTTPS detection
+app.set('trust proxy', 1);
+
 // Middleware
 app.use(cors({
     origin: function (origin, callback) {
@@ -178,10 +181,12 @@ app.use(cors({
             'http://localhost:5173',
             'http://76.13.48.189',
             'http://76.13.48.189.nip.io',
+            'https://getlifescope.com',
+            'https://www.getlifescope.com',
             'https://lifescope-ai.vercel.app'
         ];
 
-        if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('76.13.48.189')) {
+        if (allowedOrigins.indexOf(origin) !== -1 || origin.includes('76.13.48.189') || origin.includes('getlifescope.com')) {
             callback(null, true);
         } else {
             console.log("Blocked by CORS:", origin);
@@ -205,7 +210,8 @@ app.use(session({
     saveUninitialized: false,
     cookie: {
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
-        secure: false // Allow HTTP for now (VPS is not HTTPS)
+        secure: process.env.NODE_ENV === 'production', // Secure cookies over HTTPS
+        sameSite: 'lax'
     }
 }));
 
@@ -426,6 +432,14 @@ app.post('/api/auth/logout', (req, res) => {
     });
 });
 
+// Middleware to protect routes (must be defined before routes that use it)
+const ensureAuth = (req, res, next) => {
+    if (req.isAuthenticated()) {
+        return next();
+    }
+    res.status(401).json({ error: "Unauthorized" });
+};
+
 // Delete account
 app.delete('/api/auth/me', ensureAuth, async (req, res) => {
     try {
@@ -514,20 +528,8 @@ app.get('/api/auth/me', async (req, res) => {
     }
 });
 
-app.post('/api/auth/logout', (req, res) => {
-    req.logout((err) => {
-        if (err) return res.status(500).json({ error: "Logout failed" });
-        return res.json({ success: true });
-    });
-});
-
-// Middleware to protect routes
-const ensureAuth = (req, res, next) => {
-    if (req.isAuthenticated()) {
-        return next();
-    }
-    res.status(401).json({ error: "Unauthorized" });
-};
+// (duplicate logout route removed)
+// (ensureAuth moved above delete route)
 
 // Middleware: check AI quota before processing AI requests
 const checkAIQuota = async (req, res, next) => {
