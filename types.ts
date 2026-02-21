@@ -77,6 +77,9 @@ export interface FoodLog {
   carbs: number;
   fat: number;
   image?: string; // base64 string
+  confidence?: "high" | "medium" | "low";
+  items_json?: string; // stringified JSON array of items
+  notes?: string;
 }
 
 export interface MealPlanPreferences {
@@ -84,4 +87,7 @@ export interface MealPlanPreferences {
   dietType: string;
   caloriesPerDay?: string;
   allergies?: string;
+  country?: string;
+  ethnicGroup?: string;
+  duration?: string;
 }

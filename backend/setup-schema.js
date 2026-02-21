@@ -114,6 +114,9 @@ CREATE TABLE public.food_logs (
   carbs NUMERIC,
   fat NUMERIC,
   image TEXT,
+  confidence TEXT,
+  items_json TEXT,
+  notes TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 

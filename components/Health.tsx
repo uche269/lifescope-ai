@@ -18,11 +18,12 @@ import {
     Send,
     Loader2,
     Trash2,
-    HeartPulse
+    HeartPulse,
+    FileUp
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { WeightLog, BodyMeasurement, FoodLog, MealPlanPreferences } from '../types';
-import { analyzeFoodImage, generateMealPlan, improveDietPlan, interpretTestResults, healthChat } from '../services/geminiService';
+import { analyzeFoodImage, generateMealPlan, improveDietPlan, interpretTestResults, healthChat, parseHealthReport } from '../services/geminiService';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 
@@ -75,7 +76,10 @@ const Health: React.FC = () => {
         goal: 'Lose Weight',
         dietType: 'Balanced',
         caloriesPerDay: '2000',
-        allergies: ''
+        allergies: '',
+        country: '',
+        ethnicGroup: '',
+        duration: '7'
     });
 
     // --- Health Consultant State ---
@@ -104,10 +108,12 @@ const Health: React.FC = () => {
             if (Array.isArray(fData)) setFoodLogs(fData);
         } catch (error) {
             console.error('Health data fetch error:', error);
-        } finally {
             setLoading(false);
         }
     };
+
+    const [selectedTestId, setSelectedTestId] = useState<string | null>(null);
+    const [isParsingReport, setIsParsingReport] = useState(false);
 
     useEffect(() => {
         fetchHealthData();
@@ -211,6 +217,16 @@ const Health: React.FC = () => {
         }
     };
 
+    const deleteFoodLog = async (id: string) => {
+        try {
+            await api.delete(`food_logs/${id}`);
+            setFoodLogs(prev => prev.filter(log => log.id !== id));
+        } catch (e) {
+            console.error('Food log delete error', e);
+            alert('Failed to delete food log.');
+        }
+    };
+
     const capturePhoto = async () => {
         if (videoRef.current && canvasRef.current) {
             const context = canvasRef.current.getContext('2d');
@@ -235,7 +251,10 @@ const Health: React.FC = () => {
                         protein: result.protein,
                         carbs: result.carbs,
                         fat: result.fat,
-                        image: dataUrl // Saving base64 string
+                        image: dataUrl, // Saving base64 string
+                        confidence: result.confidence,
+                        items_json: JSON.stringify(result.items || []),
+                        notes: result.notes || result.suggestions?.join(', ')
                     };
                     await saveFoodLog(logData);
                 } else {
@@ -346,6 +365,37 @@ const Health: React.FC = () => {
         } finally {
             setIsInterpreting(false);
         }
+    };
+
+    const handleReportUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Convert to Base64
+        const reader = new FileReader();
+        reader.onload = async (event) => {
+            const base64String = event.target?.result?.toString().split(',')[1];
+            if (!base64String) {
+                alert("Failed to read file.");
+                return;
+            }
+
+            setIsParsingReport(true);
+            try {
+                const parsedFields = await parseHealthReport(base64String);
+                if (parsedFields && parsedFields.length > 0) {
+                    setTestFields(parsedFields);
+                } else {
+                    alert("Could not extract test results from this image. Please enter manually.");
+                }
+            } catch (err) {
+                console.error("Report parsing error:", err);
+                alert("Failed to parse report.");
+            } finally {
+                setIsParsingReport(false);
+            }
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleConsultSend = async () => {
@@ -742,29 +792,73 @@ const Health: React.FC = () => {
                                 <p>No meals logged yet. Snap a picture!</p>
                             </div>
                         ) : (
-                            foodLogs.map(log => (
-                                <div key={log.id} className="glass-panel p-4 rounded-xl flex gap-4 items-center">
-                                    {log.image ? (
-                                        <img src={log.image} alt={log.name} className="w-16 h-16 rounded-lg object-cover bg-slate-800" />
-                                    ) : (
-                                        <div className="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center">
-                                            <Utensils className="w-6 h-6 text-slate-600" />
-                                        </div>
-                                    )}
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-start">
-                                            <h4 className="font-bold text-white capitalize">{log.name}</h4>
-                                            <span className="text-xs text-slate-500">{log.date} • {log.time}</span>
-                                        </div>
-                                        <div className="flex gap-4 mt-2 text-sm">
-                                            <span className="text-indigo-300 font-bold">{log.calories} kcal</span>
-                                            <span className="text-slate-400">P: {log.protein}g</span>
-                                            <span className="text-slate-400">C: {log.carbs}g</span>
-                                            <span className="text-slate-400">F: {log.fat}g</span>
+                            foodLogs.map(log => {
+                                const items = log.items_json ? JSON.parse(log.items_json) : [];
+                                return (
+                                    <div key={log.id} className="glass-panel p-4 rounded-xl flex flex-col gap-3 transition-all hover:bg-slate-800/10">
+                                        <div className="flex gap-4 items-start">
+                                            {log.image ? (
+                                                <img src={log.image} alt={log.name} className="w-16 h-16 rounded-lg object-cover bg-slate-800 flex-shrink-0" />
+                                            ) : (
+                                                <div className="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0">
+                                                    <Utensils className="w-6 h-6 text-slate-600" />
+                                                </div>
+                                            )}
+                                            <div className="flex-1">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h4 className="font-bold text-white capitalize flex items-center gap-2">
+                                                            {log.name}
+                                                            {log.confidence && log.confidence !== 'high' && (
+                                                                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-500 font-semibold uppercase">
+                                                                    {log.confidence} confidence
+                                                                </span>
+                                                            )}
+                                                        </h4>
+                                                        <span className="text-xs text-slate-500">{log.date} • {log.time}</span>
+                                                    </div>
+                                                    <button onClick={() => deleteFoodLog(log.id)} className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+
+                                                {/* Sub-items list if available */}
+                                                {items.length > 0 && (
+                                                    <div className="mt-3 mb-2 space-y-1.5 border-l-2 border-indigo-500/30 pl-3">
+                                                        {items.map((item: any, idx: number) => (
+                                                            <div key={idx} className="flex justify-between text-xs">
+                                                                <span className="text-slate-300">{item.name} <span className="text-slate-500">({item.portion})</span></span>
+                                                                <span className="text-slate-400 font-medium">{item.calories} kcal</span>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+
+                                                <div className="flex gap-4 mt-3 pt-3 border-t border-slate-700/30 text-sm">
+                                                    <span className="text-indigo-300 font-bold">{log.calories} kcal total</span>
+                                                    <span className="text-slate-400">P: {log.protein}g</span>
+                                                    <span className="text-slate-400">C: {log.carbs}g</span>
+                                                    <span className="text-slate-400">F: {log.fat}g</span>
+                                                </div>
+
+                                                {/* Notes / Disclaimers */}
+                                                {log.notes && (
+                                                    <div className="mt-3 text-[11px] text-amber-200/70 bg-amber-500/5 p-2 rounded border border-amber-500/10 leading-relaxed">
+                                                        {log.notes}
+                                                    </div>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            ))
+                                );
+                            })
+                        )}
+                        {/* Persistent AI Accuracy Disclaimer */}
+                        {foodLogs.length > 0 && (
+                            <div className="text-[10px] text-center text-slate-500 pt-4 border-t border-slate-800">
+                                * AI evaluations of food photos are estimates and may contain inaccuracies.
+                                Always consult nutritional labels for precise macronutrient data.
+                            </div>
                         )}
                     </div>
                 </div>
@@ -787,18 +881,41 @@ const Health: React.FC = () => {
                                 <label className="block text-xs text-slate-400 mb-1">Diet Type</label>
                                 <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" value={planPrefs.dietType} onChange={e => setPlanPrefs({ ...planPrefs, dietType: e.target.value })}>
                                     <option>Balanced</option>
+                                    <option>Mediterranean</option>
                                     <option>Keto</option>
+                                    <option>Vegetarian</option>
                                     <option>Vegan</option>
                                     <option>Paleo</option>
+                                    <option>Low-Carb</option>
+                                    <option>High-Protein</option>
                                 </select>
                             </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-1">Duration (Days)</label>
+                                    <select className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" value={planPrefs.duration} onChange={e => setPlanPrefs({ ...planPrefs, duration: e.target.value })}>
+                                        <option value="1">1 Day</option>
+                                        <option value="3">3 Days</option>
+                                        <option value="7">7 Days</option>
+                                        <option value="14">14 Days</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs text-slate-400 mb-1">Calories / Day</label>
+                                    <input type="number" className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" value={planPrefs.caloriesPerDay} onChange={e => setPlanPrefs({ ...planPrefs, caloriesPerDay: e.target.value })} />
+                                </div>
+                            </div>
                             <div>
-                                <label className="block text-xs text-slate-400 mb-1">Calories / Day</label>
-                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" value={planPrefs.caloriesPerDay} onChange={e => setPlanPrefs({ ...planPrefs, caloriesPerDay: e.target.value })} />
+                                <label className="block text-xs text-slate-400 mb-1">Country / Cuisine Preference (Optional)</label>
+                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="e.g. Italy, Japan, Mexico" value={planPrefs.country} onChange={e => setPlanPrefs({ ...planPrefs, country: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-xs text-slate-400 mb-1">Ethnic Group / Specifics (Optional)</label>
+                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="e.g. Yoruba, Punjabi, Creole" value={planPrefs.ethnicGroup} onChange={e => setPlanPrefs({ ...planPrefs, ethnicGroup: e.target.value })} />
                             </div>
                             <div>
                                 <label className="block text-xs text-slate-400 mb-1">Allergies / Dislikes</label>
-                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="e.g. peanuts, fish" value={planPrefs.allergies} onChange={e => setPlanPrefs({ ...planPrefs, allergies: e.target.value })} />
+                                <input className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2.5 text-white text-sm" placeholder="e.g. peanuts, fish, cilantro" value={planPrefs.allergies} onChange={e => setPlanPrefs({ ...planPrefs, allergies: e.target.value })} />
                             </div>
 
                             <button
@@ -882,9 +999,16 @@ const Health: React.FC = () => {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                     {/* Test Results Input */}
                     <div className="glass-panel p-6 rounded-2xl space-y-4">
-                        <h3 className="text-lg font-semibold text-white flex items-center gap-2">
-                            <Stethoscope className="w-5 h-5 text-emerald-400" /> Log Test Results
-                        </h3>
+                        <div className="flex justify-between items-center">
+                            <h3 className="text-lg font-semibold text-white flex items-center gap-2">
+                                <Stethoscope className="w-5 h-5 text-emerald-400" /> Log Test Results
+                            </h3>
+                            <label className={`cursor-pointer flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${isParsingReport ? 'bg-indigo-600/50 text-indigo-300' : 'bg-slate-800 hover:bg-slate-700 text-slate-300'}`}>
+                                {isParsingReport ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileUp className="w-4 h-4" />}
+                                {isParsingReport ? 'Scanning...' : 'Upload Report'}
+                                <input type="file" accept="image/*,application/pdf" className="hidden" onChange={handleReportUpload} disabled={isParsingReport} />
+                            </label>
+                        </div>
 
                         <div className="grid grid-cols-2 gap-3">
                             <div>
@@ -945,15 +1069,56 @@ const Health: React.FC = () => {
                         )}
 
                         {savedTests.length > 0 && (
-                            <div className="mt-4">
-                                <h4 className="text-xs uppercase text-slate-500 font-bold mb-2">Previous Tests</h4>
-                                <div className="space-y-2 max-h-[200px] overflow-y-auto custom-scrollbar">
+                            <div className="mt-4 pt-4 border-t border-slate-800">
+                                <h4 className="text-xs uppercase text-slate-500 font-bold mb-3">Previous Tests</h4>
+                                <div className="space-y-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-2">
                                     {savedTests.map(t => (
-                                        <div key={t.id} className="bg-slate-900/50 p-3 rounded-lg border border-slate-800 text-sm">
-                                            <div className="flex justify-between">
-                                                <span className="text-white font-medium">{t.test_type}</span>
-                                                <span className="text-xs text-slate-500">{new Date(t.test_date).toLocaleDateString()}</span>
-                                            </div>
+                                        <div key={t.id} className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden transition-all">
+                                            <button
+                                                onClick={() => setSelectedTestId(selectedTestId === t.id ? null : t.id)}
+                                                className="w-full p-4 flex justify-between items-center hover:bg-slate-800/50 transition-colors"
+                                            >
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-indigo-500/10 rounded-lg">
+                                                        <FileUp className="w-4 h-4 text-indigo-400" />
+                                                    </div>
+                                                    <div className="text-left">
+                                                        <span className="block text-white font-medium">{t.test_type}</span>
+                                                        <span className="block text-xs text-slate-500">{new Date(t.test_date).toLocaleDateString()}</span>
+                                                    </div>
+                                                </div>
+                                                <div className={`transform transition-transform text-slate-500 ${selectedTestId === t.id ? 'rotate-180' : ''}`}>
+                                                    ▼
+                                                </div>
+                                            </button>
+
+                                            {selectedTestId === t.id && (
+                                                <div className="p-4 border-t border-slate-700/50 bg-slate-900/80">
+                                                    <div className="mb-4">
+                                                        <h5 className="text-xs font-semibold text-slate-400 mb-2 uppercase">Raw Values</h5>
+                                                        <div className="grid grid-cols-2 gap-2 text-sm text-slate-300">
+                                                            {Object.entries(t.results || {}).map(([key, value]) => (
+                                                                <div key={key} className="flex justify-between bg-slate-800/50 px-3 py-1.5 rounded">
+                                                                    <span className="text-slate-400">{key}</span>
+                                                                    <span className="font-medium text-white">{String(value)}</span>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                    <div>
+                                                        <h5 className="text-xs font-semibold text-slate-400 mb-2 uppercase">AI Interpretation</h5>
+                                                        <div className="text-sm text-slate-300 leading-relaxed whitespace-pre-line text-xs font-medium bg-indigo-500/5 p-3 border border-indigo-500/10 rounded-lg">
+                                                            {t.ai_interpretation}
+                                                        </div>
+                                                    </div>
+                                                    <button onClick={async () => {
+                                                        await api.delete(`health/test-results/${t.id}`);
+                                                        setSavedTests(savedTests.filter(test => test.id !== t.id));
+                                                    }} className="mt-4 flex items-center gap-2 text-xs text-red-400 hover:text-red-300 transition-colors">
+                                                        <Trash2 className="w-3.5 h-3.5" /> Delete Report
+                                                    </button>
+                                                </div>
+                                            )}
                                         </div>
                                     ))}
                                 </div>

@@ -279,15 +279,27 @@ export const analyzeFoodImage = async (base64Image: string) => {
     const model = 'gemini-2.0-flash';
 
     const prompt = `
-      Analyze the food in this image.
-      Estimate the calories, protein (g), carbs (g), and fat (g).
-      Return ONLY a JSON object in this format:
+      Analyze the food in this image carefully.
+
+      RULES:
+      1. If you cannot clearly identify the food, set "confidence" to "low" and explain in "notes" why it's hard to determine.
+      2. If you can identify the food, provide your best calorie and macro estimates.
+      3. Break down each identifiable item separately in the "items" array.
+      4. Always be honest about uncertainty — these are estimates, not exact values.
+
+      Return ONLY a JSON object in this exact format:
       {
-        "name": "Description of food",
+        "name": "Overall description of the meal",
+        "confidence": "high" | "medium" | "low",
+        "items": [
+          { "name": "Item 1", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "portion": "estimated portion size" }
+        ],
         "calories": 0,
         "protein": 0,
         "carbs": 0,
-        "fat": 0
+        "fat": 0,
+        "notes": "Any caveats or observations about accuracy",
+        "suggestions": ["Foods that work well for photo calorie tracking"]
       }
       Do not include any other text or markdown code blocks.
     `;
@@ -308,7 +320,6 @@ export const analyzeFoodImage = async (base64Image: string) => {
     const text = response.text;
     if (!text) throw new Error("No response");
 
-    // Clean potential markdown just in case (though responseMimeType should handle it)
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
     return JSON.parse(jsonStr);
   } catch (error) {
@@ -321,16 +332,27 @@ export const generateMealPlan = async (preferences: any) => {
   try {
     const ai = getAI();
     const model = 'gemini-2.0-flash';
+    const duration = preferences.duration || '7';
+    const countryLine = preferences.country ? `Country/Cuisine Preference: ${preferences.country}` : '';
+    const ethnicLine = preferences.ethnicGroup ? `Ethnic/Cultural Food Preferences: ${preferences.ethnicGroup}` : '';
 
     const prompt = `
-      Create a 1-day meal plan (Breakfast, Lunch, Dinner, Snack) based on these preferences:
+      Create a detailed ${duration}-day meal plan (Breakfast, Lunch, Dinner, and 1-2 Snacks per day) based on these preferences:
       Goal: ${preferences.goal}
       Diet Type: ${preferences.dietType}
-      Calories Target: ${preferences.caloriesPerDay}
-      Allergies/Dislikes: ${preferences.allergies}
+      Calories Target: ${preferences.caloriesPerDay} per day
+      Allergies/Dislikes: ${preferences.allergies || 'None'}
+      ${countryLine}
+      ${ethnicLine}
 
-      Format the output as a clean list without Markdown symbols (*, #).
-      Include calorie counts for each meal.
+      REQUIREMENTS:
+      - Provide variety — do NOT repeat the same meals across different days
+      - Include estimated calorie counts for each meal and a daily total
+      - If a country or ethnic cuisine is specified, tailor meals to that cuisine
+      - Use realistic, easy-to-prepare meals
+      - Format as a clean, readable text plan organized by Day (Day 1, Day 2, etc.)
+      - Do NOT use markdown symbols (*, #, **) — use plain text with line breaks
+      - End with a brief "Shopping Essentials" section listing key ingredients needed
     `;
 
     const response = await ai.models.generateContent({
@@ -434,6 +456,50 @@ Keep responses concise and helpful. Do not use markdown formatting. If you canno
 }
 
 // --- Health Consultant Services ---
+
+export const parseHealthReport = async (base64Image: string) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.0-flash';
+
+    const prompt = `
+      You are an expert medical data extractor. 
+      Read the following health/lab report image carefully.
+      Extract the test parameters and their values.
+      
+      Return ONLY a JSON array of objects in this exact format:
+      [
+        { "key": "Parameter Name (e.g. WBC, Cholesterol)", "value": "Value (e.g. 5.2)" }
+      ]
+      
+      RULES:
+      1. ONLY return the JSON array. No markdown blocks, no other text.
+      2. If you cannot read the image or it is not a health report, return an empty array: []
+    `;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: {
+        parts: [
+          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+          { text: prompt }
+        ]
+      },
+      config: {
+        responseMimeType: "application/json"
+      }
+    });
+
+    const text = response.text;
+    if (!text) return [];
+
+    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+    return JSON.parse(jsonStr);
+  } catch (error) {
+    console.error("Parse Report Error:", error);
+    return [];
+  }
+};
 
 export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
   try {
