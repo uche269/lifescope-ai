@@ -1,0 +1,3 @@
+getlifescope.com, www.getlifescope.com {
+    reverse_proxy app:3000
+}

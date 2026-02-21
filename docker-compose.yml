@@ -5,8 +5,6 @@ services:
       args:
         - VITE_API_URL=${VITE_API_URL}
     restart: always
-    ports:
-      - "80:3000"
     environment:
       - NODE_ENV=production
       - PORT=3000
@@ -22,5 +20,20 @@ services:
     volumes:
       - uploads:/app/backend/uploads
 
+  caddy:
+    image: caddy:2
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+
 volumes:
   uploads:
+  caddy_data:
+  caddy_config:

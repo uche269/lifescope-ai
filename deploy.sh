@@ -37,8 +37,8 @@ if [ ! -f .env ]; then
 NODE_ENV=production
 PORT=3000
 DATABASE_URL=postgresql://lifescope_user:Nuujj78rfw@76.13.48.189:5432/lifescope
-FRONTEND_URL=http://76.13.48.189.nip.io
-VITE_API_URL=http://76.13.48.189.nip.io/api
+FRONTEND_URL=https://getlifescope.com
+VITE_API_URL=https://getlifescope.com/api
 
 # Auth Secrets - REPLACE THESE!
 GOOGLE_CLIENT_ID=
@@ -58,7 +58,15 @@ EOT
     exit 0
 fi
 
-# 4. Build and Launch
+# 4. Patch existing .env if needed
+if [ -f .env ]; then
+    echo "Upgrading existing .env URLs to HTTPS getlifescope.com..."
+    sed -i 's|http://76.13.48.189.nip.io|https://getlifescope.com|g' .env
+    # Change the VITE API URL format back correctly since sed blanket updates it
+    sed -i 's|https://getlifescope.com/api|https://getlifescope.com/api|g' .env
+fi
+
+# 5. Build and Launch
 echo "Building and starting containers..."
 docker compose up -d --build
 
