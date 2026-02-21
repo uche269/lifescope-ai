@@ -33,6 +33,9 @@ UPDATE public.users SET is_admin = true WHERE email = 'uchechukwunnorom2004@gmai
 UPDATE public.users 
   SET trial_ends_at = CURRENT_TIMESTAMP + INTERVAL '7 days' 
   WHERE trial_ends_at IS NULL AND is_admin = false;
+-- Phase 4: Linked Goals Migration
+ALTER TABLE public.goals ADD COLUMN IF NOT EXISTS linked_module TEXT;
+ALTER TABLE public.goals ADD COLUMN IF NOT EXISTS linked_target_value NUMERIC;
 `;
 
 const run = async () => {

@@ -67,7 +67,7 @@ const DocumentTools: React.FC = () => {
 
     // Report State
     const [reportPrompt, setReportPrompt] = useState('');
-    const [reportFormat, setReportFormat] = useState<'pdf' | 'docx' | 'pptx' | 'xlsx'>('pdf');
+    const [reportFormat, setReportFormat] = useState<'pdf' | 'docx' | 'xlsx'>('pdf');
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
     // --- Helper Functions ---
@@ -367,12 +367,6 @@ const DocumentTools: React.FC = () => {
                 link.download = 'AI_Report.docx';
                 link.click();
                 URL.revokeObjectURL(url);
-            } else if (reportFormat === 'pptx') {
-                const pptxgen = (await import('pptxgenjs')).default;
-                const pres = new pptxgen();
-                const slide = pres.addSlide();
-                slide.addText(reportContent, { x: 0.5, y: 0.5, w: '90%', h: '90%', fontSize: 14 });
-                await pres.writeFile({ fileName: 'AI_Presentation.pptx' });
             } else if (reportFormat === 'xlsx') {
                 const XLSX = await import('xlsx');
                 // Extremely basic CSV parse
@@ -753,15 +747,15 @@ const DocumentTools: React.FC = () => {
                             <textarea
                                 value={reportPrompt}
                                 onChange={(e) => setReportPrompt(e.target.value)}
-                                placeholder="e.g., Generate a Q3 Marketing Strategy presentation with 5 slides based on the attached data..."
+                                placeholder="e.g., Generate a Q3 Marketing Strategy document based on the attached data..."
                                 className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 min-h-[120px]"
                             />
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-2">Export Format</label>
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {['pdf', 'docx', 'pptx', 'xlsx'].map(fmt => (
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {['pdf', 'docx', 'xlsx'].map(fmt => (
                                     <button
                                         key={fmt}
                                         onClick={() => setReportFormat(fmt as any)}

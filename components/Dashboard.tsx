@@ -1,11 +1,12 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, Legend } from 'recharts';
 import { Goal, GoalCategory } from '../types';
-import { TrendingUp, CheckCircle2, AlertCircle, Sparkles, FileText, X, Download, LayoutTemplate, Target } from 'lucide-react';
+import { TrendingUp, CheckCircle2, AlertCircle, Sparkles, FileText, X, Download, LayoutTemplate, Target, HeartPulse, Wallet } from 'lucide-react';
 import { api } from '../services/api';
 import { useAuth } from '../contexts/AuthContext';
 import { generateAnnualReport } from '../services/geminiService';
 import { checkIsCompleted } from '../utils/activityUtils';
+import OnboardingWizard from './OnboardingWizard';
 
 interface DashboardProps {
   goals: Goal[];
@@ -16,6 +17,20 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
   const [showReportModal, setShowReportModal] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const { user } = useAuth(); // Get user for name
+
+  const [showOnboarding, setShowOnboarding] = useState(false);
+
+  useEffect(() => {
+    const hasCompleted = localStorage.getItem('ls_onboarding_completed') === 'true';
+    if (goals.length === 0 && !hasCompleted) {
+      setShowOnboarding(true);
+    }
+  }, [goals.length]);
+
+  const handleOnboardingComplete = () => {
+    localStorage.setItem('ls_onboarding_completed', 'true');
+    setShowOnboarding(false);
+  };
 
   const activeFocus = useMemo(() => {
     const highPriority = goals.filter(g => g.priority === 'High');
@@ -172,13 +187,60 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
     return deadlineDate < todayDate;
   });
 
+  const userNameToShow = user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'there';
+
+  if (showOnboarding) {
+    return <OnboardingWizard onComplete={handleOnboardingComplete} userName={userNameToShow} />;
+  }
+
+  // CTA Empty States
+  if (goals.length === 0) {
+    return (
+      <div className="space-y-8 animate-page-enter">
+        <div>
+          <h1 className="text-3xl font-bold glow-text mb-2">Welcome aboard, {userNameToShow}!</h1>
+          <p className="text-slate-400">Your LifeScope is a blank canvas. Let's start tracking your progress.</p>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div onClick={() => window.location.href = '/goals'} className="glass-panel p-6 rounded-2xl flex flex-col items-center text-center border-t-4 border-t-red-500 group hover:-translate-y-1 transition-transform cursor-pointer">
+            <div className="p-4 bg-red-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
+              <Target className="w-8 h-8 text-red-500" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Set Your First Goal</h3>
+            <p className="text-sm text-slate-400 mb-6 flex-1">Define what matters most to you and track your activities daily.</p>
+            <button className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-6 rounded-xl transition-colors w-full">Go to Goals</button>
+          </div>
+
+          <div onClick={() => window.location.href = '/health'} className="glass-panel p-6 rounded-2xl flex flex-col items-center text-center border-t-4 border-t-emerald-500 group hover:-translate-y-1 transition-transform cursor-pointer">
+            <div className="p-4 bg-emerald-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
+              <HeartPulse className="w-8 h-8 text-emerald-500" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Log Health Metrics</h3>
+            <p className="text-sm text-slate-400 mb-6 flex-1">Track your weight, log meals via AI, or upload a health report.</p>
+            <button className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-6 rounded-xl transition-colors w-full">Go to Health</button>
+          </div>
+
+          <div onClick={() => window.location.href = '/finance'} className="glass-panel p-6 rounded-2xl flex flex-col items-center text-center border-t-4 border-t-amber-500 group hover:-translate-y-1 transition-transform cursor-pointer">
+            <div className="p-4 bg-amber-500/10 rounded-full mb-4 group-hover:scale-110 transition-transform">
+              <Wallet className="w-8 h-8 text-amber-500" />
+            </div>
+            <h3 className="text-lg font-bold text-white mb-2">Setup Finances</h3>
+            <p className="text-sm text-slate-400 mb-6 flex-1">Log your first income or expense to start gaining AI financial insights.</p>
+            <button className="bg-slate-800 hover:bg-slate-700 text-white font-bold py-2 px-6 rounded-xl transition-colors w-full">Go to Finance</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8 animate-page-enter">
       {/* Header Section */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold glow-text mb-2">
-            Welcome back, {user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'Boss'}
+            Welcome back, {userNameToShow}
           </h1>
           <p className="text-slate-400 text-sm md:text-base">Here's your LifeScope overview for today.</p>
         </div>

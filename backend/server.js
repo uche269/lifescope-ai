@@ -91,6 +91,10 @@ const initDb = async () => {
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS is_verified BOOLEAN DEFAULT false;`);
         await pool.query(`ALTER TABLE public.users ADD COLUMN IF NOT EXISTS verification_token TEXT;`);
 
+        // Add Phase 4 columns for Linked Goals
+        await pool.query(`ALTER TABLE public.goals ADD COLUMN IF NOT EXISTS linked_module TEXT;`);
+        await pool.query(`ALTER TABLE public.goals ADD COLUMN IF NOT EXISTS linked_target_value NUMERIC;`);
+
         // Finance tables
         await pool.query(`
             CREATE TABLE IF NOT EXISTS public.goal_categories (
@@ -362,18 +366,31 @@ app.post('/api/auth/register', async (req, res) => {
         try {
             const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
             const verifyLink = `${frontendUrl}/login?verify=${token}`;
-            await resend.emails.send({
-                from: 'LifeScope AI <onboarding@resend.dev>', // Use verified domain in prod
-                to: email,
-                subject: 'Verify your LifeScope AI Account',
-                html: `<h2>Welcome to LifeScope AI, ${fullName}!</h2>
+            const emailHtml = `<h2>Welcome to LifeScope AI, ${fullName}!</h2>
                        <p>Please click the link below to verify your email address and activate your account:</p>
                        <p><a href="${verifyLink}" style="padding:10px 20px;background:#4f46e5;color:white;text-decoration:none;border-radius:5px;">Verify My Account</a></p>
                        <p>If you did not request this, please ignore this email.</p>
                        <br/>
-                       <p>Best regards,<br/>LifeScope AI</p>`
-            });
-            console.log(`✅ Verification email sent to ${email}`);
+                       <p>Best regards,<br/>LifeScope AI</p>`;
+
+            if (transporter && process.env.SMTP_EMAIL) {
+                // Fallback to SMTP since Resend Sandbox only sends to verified domains
+                await transporter.sendMail({
+                    from: `"LifeScope AI" <${process.env.SMTP_EMAIL}>`,
+                    to: email,
+                    subject: 'Verify your LifeScope AI Account',
+                    html: emailHtml
+                });
+                console.log(`✅ Verification email sent (via SMTP) to ${email}`);
+            } else {
+                await resend.emails.send({
+                    from: 'LifeScope AI <support@getlifescope.com>', // Verified domain
+                    to: email,
+                    subject: 'Verify your LifeScope AI Account',
+                    html: emailHtml
+                });
+                console.log(`✅ Verification email sent (via Resend) to ${email}`);
+            }
         } catch (emailErr) {
             console.error('❌ Failed to send verification email:', emailErr);
         }
@@ -506,7 +523,7 @@ app.get('/api/auth/me', async (req, res) => {
             const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
 
             // AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
-            const limits = { free: 10, pro: 50, premium: 999999 };
+            const limits = { free: 10, pro: 10, premium: 999999 };
             const aiLimit = limits[effectivePlan] ?? 10;
 
             res.json({
@@ -550,7 +567,7 @@ const checkAIQuota = async (req, res, next) => {
         const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
         const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
 
-        const limits = { free: 10, pro: 50, premium: 999999 };
+        const limits = { free: 10, pro: 10, premium: 999999 };
         const limit = limits[effectivePlan] || 0;
 
         if ((user.ai_calls_today || 0) >= limit) {
@@ -1247,6 +1264,68 @@ app.post('/api/health/test-results', ensureAuth, async (req, res) => {
     }
 });
 
+// Chat Endpoints
+app.post('/api/chat/log', ensureAuth, async (req, res) => {
+    try {
+        const { messages } = req.body;
+
+        let { rows } = await pool.query('SELECT id FROM public.chat_logs WHERE user_id = $1 AND resolved = false ORDER BY created_at DESC LIMIT 1', [req.user.id]);
+
+        if (rows.length > 0) {
+            await pool.query('UPDATE public.chat_logs SET messages = $1, updated_at = NOW() WHERE id = $2', [JSON.stringify(messages), rows[0].id]);
+        } else {
+            await pool.query('INSERT INTO public.chat_logs (user_id, messages) VALUES ($1, $2)', [req.user.id, JSON.stringify(messages)]);
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Chat log error", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
+    try {
+        const { messages, userName, userEmail } = req.body;
+
+        // Mark latest chat as escalated
+        let { rows } = await pool.query('SELECT id FROM public.chat_logs WHERE user_id = $1 AND resolved = false ORDER BY created_at DESC LIMIT 1', [req.user.id]);
+        if (rows.length > 0) {
+            await pool.query('UPDATE public.chat_logs SET escalated = true, messages = $1 WHERE id = $2', [JSON.stringify(messages), rows[0].id]);
+        }
+
+        const adminEmail = process.env.SMTP_EMAIL || 'support@getlifescope.com';
+        const chatHtml = messages.map(m => `<b>${m.role.toUpperCase()}:</b> <p>${m.text}</p>`).join('<hr/>');
+
+        const html = `<h2>Chat Escalation Alert</h2>
+                      <p><b>User:</b> ${userName || 'Unknown'} (${userEmail || 'Unknown'})</p>
+                      <h3>Conversation Log:</h3>
+                      <div style="background:#f4f4f4;padding:15px;border-radius:5px;font-family:sans-serif;">${chatHtml}</div>`;
+
+        if (transporter && process.env.SMTP_EMAIL) {
+            await transporter.sendMail({
+                from: `"LifeScope System" <${process.env.SMTP_EMAIL}>`,
+                to: adminEmail,
+                subject: `Support Escalation: ${userName || 'User'}`,
+                html: html
+            });
+            console.log("✅ Chat Escalation sent via SMTP");
+        } else {
+            await resend.emails.send({
+                from: 'LifeScope System <support@getlifescope.com>',
+                to: adminEmail,
+                subject: `Support Escalation: ${userName || 'User'}`,
+                html: html
+            });
+            console.log("✅ Chat Escalation sent via Resend");
+        }
+        res.json({ success: true });
+    } catch (err) {
+        console.error("Escalation error", err);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 app.get('/api/health/test-results', ensureAuth, async (req, res) => {
     try {
         const { rows } = await pool.query(
@@ -1297,7 +1376,7 @@ const sendMonthlySummaries = async () => {
 
                 try {
                     await resend.emails.send({
-                        from: 'LifeScope AI <onboarding@resend.dev>', // Use verified domain in prod
+                        from: 'LifeScope AI <support@getlifescope.com>', // Verified domain
                         to: user.email,
                         subject: 'Your Monthly LifeScope Report',
                         html: `<h2>Hello ${user.full_name || 'there'}!</h2>

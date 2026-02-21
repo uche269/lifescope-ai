@@ -55,7 +55,7 @@ const Settings: React.FC = () => {
     const handleDeleteAccount = async () => {
         setDeleteLoading(true);
         try {
-            await api.delete('auth/me');
+            await api.delete('auth/me', '');
             await signOut(); // Force logout and wipe context
         } catch (e: any) {
             alert("Delete failed: " + e.message);
@@ -152,6 +152,24 @@ const Settings: React.FC = () => {
                                     </div>
                                 </div>
                             </div>
+
+                            {/* Premium Upsell Card */}
+                            {planInfo?.effectivePlan === 'free' && (
+                                <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/30 rounded-xl p-5 flex items-start gap-4 mt-4">
+                                    <div className="p-2 bg-indigo-500/20 rounded-lg shrink-0">
+                                        <Sparkles className="w-5 h-5 text-indigo-400" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm font-bold text-white mb-1">Upgrade to Premium</p>
+                                        <p className="text-xs text-slate-400 leading-relaxed mb-3">
+                                            Unlock an unlimited context window and access to our most advanced reasoning model (Gemini 2.0 Pro) for deeper financial insights and complex health analyses.
+                                        </p>
+                                        <button className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-500/20">
+                                            View Premium Plans
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
 
                             <div className="bg-slate-900/50 rounded-xl p-4 text-xs text-slate-500">
                                 <p>Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'recently'}</p>
@@ -308,6 +326,23 @@ const Settings: React.FC = () => {
                                     <div>
                                         <h3 className="text-lg font-bold text-white">Account</h3>
                                         <p className="text-xs text-slate-500">Manage your account and session</p>
+                                    </div>
+                                </div>
+
+                                {/* Data Security & Privacy */}
+                                <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-5">
+                                    <div className="flex items-start gap-4">
+                                        <div className="p-2 bg-emerald-500/20 rounded-lg shrink-0">
+                                            <ShieldCheck className="w-5 h-5 text-emerald-400" />
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-white mb-1">Your Data is Private & Secure</p>
+                                            <p className="text-xs text-slate-400 leading-relaxed">
+                                                LifeScope operates on a private, encrypted Hostinger Virtual Private Server (VPS).
+                                                You own 100% of your data. We do not sell or share your personal information with third-party advertisers,
+                                                and AI usage is securely isolated to protect your identity.
+                                            </p>
+                                        </div>
                                     </div>
                                 </div>
 

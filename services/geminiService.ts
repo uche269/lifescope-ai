@@ -228,7 +228,7 @@ export const analyzeUrl = async (url: string) => {
 export const generateAnnualReport = async (userData: any) => {
   try {
     const ai = getAI();
-    const MODEL_NAME = 'gemini-2.0-flash';
+    const MODEL_NAME = 'gemini-1.5-pro';
 
     const prompt = `
             You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
@@ -460,7 +460,7 @@ Keep responses concise and helpful. Do not use markdown formatting. If you canno
 export const parseHealthReport = async (base64Image: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-1.5-pro';
 
     const prompt = `
       You are an expert medical data extractor. 
@@ -504,7 +504,7 @@ export const parseHealthReport = async (base64Image: string) => {
 export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-1.5-pro';
 
     const prompt = `
       Interpret these medical test results in plain language:
@@ -551,7 +551,7 @@ export const healthChat = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-1.5-pro';
 
     const contextSummary = [];
     if (healthContext.weightLogs?.length) {
@@ -642,11 +642,11 @@ If the user asks you to summarize, extract data, find specific information, or e
 export const generateReport = async (
   prompt: string,
   documentText?: string,
-  format: 'pdf' | 'docx' | 'pptx' | 'xlsx' = 'pdf'
+  format: 'pdf' | 'docx' | 'xlsx' = 'pdf'
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-1.5-pro';
 
     let contextText = '';
     if (documentText) {
@@ -656,7 +656,6 @@ export const generateReport = async (
     const formatInstructions = {
       pdf: 'Provide a comprehensive, continuous essay-style report with clear section headings, bullet points, and paragraphs.',
       docx: 'Provide a structured document. Use clear Header 1, Header 2 formatting and bulleted lists where appropriate.',
-      pptx: 'Provide a presentation deck structure. Break the content into distinct "Slide" sections. Each Slide should have a "Title:" and a set of "Bullet Points:"',
       xlsx: 'Provide data in a tabular format. Return a CSV-like structure using | (pipe) to separate columns, and new lines for rows. First row should be headers.'
     };
 
