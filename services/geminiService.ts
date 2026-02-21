@@ -638,3 +638,46 @@ If the user asks you to summarize, extract data, find specific information, or e
     throw error;
   }
 }
+
+export const generateReport = async (
+  prompt: string,
+  documentText?: string,
+  format: 'pdf' | 'docx' | 'pptx' | 'xlsx' = 'pdf'
+) => {
+  try {
+    const ai = getAI();
+    const model = 'gemini-2.0-flash';
+
+    let contextText = '';
+    if (documentText) {
+      contextText = `REFERENCE DOCUMENT:\n---\n${documentText.slice(0, 30000)}\n---\n\n`;
+    }
+
+    const formatInstructions = {
+      pdf: 'Provide a comprehensive, continuous essay-style report with clear section headings, bullet points, and paragraphs.',
+      docx: 'Provide a structured document. Use clear Header 1, Header 2 formatting and bulleted lists where appropriate.',
+      pptx: 'Provide a presentation deck structure. Break the content into distinct "Slide" sections. Each Slide should have a "Title:" and a set of "Bullet Points:"',
+      xlsx: 'Provide data in a tabular format. Return a CSV-like structure using | (pipe) to separate columns, and new lines for rows. First row should be headers.'
+    };
+
+    const systemPrompt = `You are a professional report generation AI. 
+${contextText}
+The user wants you to generate a report based on this prompt: "${prompt}"
+
+Format requirement: ${formatInstructions[format]}
+Ensure the content is high quality, professional, and directly addresses the prompt. Do not include conversational filler; return only the report content.`;
+
+    const response = await ai.models.generateContent({
+      model,
+      contents: systemPrompt,
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("No response generated.");
+
+    return text;
+  } catch (error) {
+    console.error("Report Generation Error:", error);
+    throw error;
+  }
+}

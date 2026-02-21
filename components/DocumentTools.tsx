@@ -2,10 +2,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     FileUp, PenLine, Merge, Sparkles, FileText, Download,
     Loader2, Trash2, MessageCircle, ZoomIn, ZoomOut,
-    ChevronLeft, ChevronRight, type LucideIcon, Move
+    ChevronLeft, ChevronRight, type LucideIcon, Move, Send
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { analyzeDocument, analyzeUrl } from '../services/geminiService';
+import { analyzeDocument, analyzeUrl, chatWithDocument, generateReport } from '../services/geminiService';
 import { Document, Page, pdfjs } from 'react-pdf';
 import Draggable from 'react-draggable';
 
@@ -34,7 +34,7 @@ interface DraggableItem {
 
 const DocumentTools: React.FC = () => {
     const { planInfo } = useAuth();
-    const [activeTab, setActiveTab] = useState<'editor' | 'merge' | 'summarize' | 'chat'>('editor');
+    const [activeTab, setActiveTab] = useState<'editor' | 'merge' | 'summarize' | 'chat' | 'report'>('editor');
     const [pdfFile, setPdfFile] = useState<File | null>(null);
     const [pdfUrl, setPdfUrl] = useState('');
     const [loading, setLoading] = useState(false);
@@ -58,6 +58,17 @@ const DocumentTools: React.FC = () => {
 
     const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free';
     const containerRef = useRef<HTMLDivElement>(null);
+
+    // Chat State
+    const [chatMessages, setChatMessages] = useState<{ role: string, text: string }[]>([]);
+    const [chatInput, setChatInput] = useState('');
+    const [isChatLoading, setIsChatLoading] = useState(false);
+    const chatScrollRef = useRef<HTMLDivElement>(null);
+
+    // Report State
+    const [reportPrompt, setReportPrompt] = useState('');
+    const [reportFormat, setReportFormat] = useState<'pdf' | 'docx' | 'pptx' | 'xlsx'>('pdf');
+    const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
     // --- Helper Functions ---
     const hexToRgb = (hex: string) => {
@@ -279,6 +290,107 @@ const DocumentTools: React.FC = () => {
         finally { setLoading(false); }
     };
 
+    // --- Document Text Extraction Helper ---
+    const extractTextFromPDF = async (file: File) => {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjs.getDocument(arrayBuffer).promise;
+        let fullText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+            const page = await pdf.getPage(i);
+            const textContent = await page.getTextContent();
+            const pageText = textContent.items.map((item: any) => item.str).join(' ');
+            fullText += pageText + '\n';
+        }
+        return fullText;
+    };
+
+    // --- Chat Logic ---
+    const handleChatSend = async () => {
+        if (!chatInput.trim() || isAILocked || !pdfFile) return;
+
+        const userMsg = { role: 'user', text: chatInput.trim() };
+        setChatMessages(prev => [...prev, userMsg]);
+        setChatInput('');
+        setIsChatLoading(true);
+
+        try {
+            const documentText = await extractTextFromPDF(pdfFile);
+            const response = await chatWithDocument(userMsg.text, documentText, chatMessages);
+            setChatMessages(prev => [...prev, { role: 'model', text: response }]);
+        } catch (err: any) {
+            setChatMessages(prev => [...prev, { role: 'model', text: 'Error: ' + err.message }]);
+        } finally {
+            setIsChatLoading(false);
+            setTimeout(() => chatScrollRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
+        }
+    };
+
+    // --- Report Generator Logic ---
+    const handleGenerateReport = async () => {
+        if (!reportPrompt.trim() || isAILocked) return;
+        setIsGeneratingReport(true);
+        setResult(null);
+
+        try {
+            let documentText = '';
+            if (pdfFile) {
+                documentText = await extractTextFromPDF(pdfFile);
+            }
+
+            const reportContent = await generateReport(reportPrompt, documentText, reportFormat);
+
+            // We have the raw report content. Depending on format, we'd normally call 
+            // the respective generation library (docx, pptxgenjs, xlsx, jspdf) here.
+            // For now, let's output it as the result text, and simulate the download.
+
+            // Generate formats
+            if (reportFormat === 'pdf') {
+                const { jsPDF } = await import('jspdf');
+                const doc = new jsPDF();
+                const splitText = doc.splitTextToSize(reportContent, 180);
+                doc.text(splitText, 15, 20);
+                doc.save('AI_Report.pdf');
+            } else if (reportFormat === 'docx') {
+                const { Document, Packer, Paragraph, TextRun } = await import('docx');
+                const doc = new Document({
+                    sections: [{
+                        properties: {},
+                        children: reportContent.split('\n').map(line => new Paragraph({
+                            children: [new TextRun(line)]
+                        }))
+                    }]
+                });
+                const blob = await Packer.toBlob(doc);
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'AI_Report.docx';
+                link.click();
+                URL.revokeObjectURL(url);
+            } else if (reportFormat === 'pptx') {
+                const pptxgen = (await import('pptxgenjs')).default;
+                const pres = new pptxgen();
+                const slide = pres.addSlide();
+                slide.addText(reportContent, { x: 0.5, y: 0.5, w: '90%', h: '90%', fontSize: 14 });
+                await pres.writeFile({ fileName: 'AI_Presentation.pptx' });
+            } else if (reportFormat === 'xlsx') {
+                const XLSX = await import('xlsx');
+                // Extremely basic CSV parse
+                const rows = reportContent.split('\n').map(r => r.split('|').map(c => c.trim()));
+                const ws = XLSX.utils.aoa_to_sheet(rows);
+                const wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, "Report");
+                XLSX.writeFile(wb, "AI_Data.xlsx");
+            }
+
+            setResult('Report generated and downloaded successfully!');
+        } catch (err: any) {
+            setResult('Error generating report: ' + err.message);
+        } finally {
+            setIsGeneratingReport(false);
+        }
+    };
+
     return (
         <div className="space-y-6 animate-page-enter">
             {/* Header */}
@@ -293,6 +405,8 @@ const DocumentTools: React.FC = () => {
                     { id: 'editor' as const, label: 'Visual Editor', icon: PenLine },
                     { id: 'merge' as const, label: 'Merge', icon: Merge },
                     { id: 'summarize' as const, label: 'AI Summary', icon: Sparkles },
+                    { id: 'chat' as const, label: 'Chat with Doc', icon: MessageCircle },
+                    { id: 'report' as const, label: 'Create Report', icon: FileText },
                 ].map(tab => (
                     <button
                         key={tab.id}
@@ -555,6 +669,124 @@ const DocumentTools: React.FC = () => {
                             {result}
                         </div>
                     )}
+                </div>
+            )}
+
+            {/* Chat Tab */}
+            {activeTab === 'chat' && (
+                <div className="glass-panel rounded-2xl p-6 h-[600px] flex flex-col">
+                    {!pdfFile && (
+                        <div className="mb-4 p-4 rounded-xl bg-indigo-500/10 border border-indigo-500/20 flex flex-col items-center justify-center">
+                            <p className="text-sm text-indigo-300 font-medium mb-2">Upload a document to chat with it</p>
+                            <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                                className="text-xs text-slate-500 file:mr-4 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:font-medium file:bg-indigo-600 file:text-white hover:file:bg-indigo-700 cursor-pointer"
+                            />
+                        </div>
+                    )}
+
+                    <div className="flex-1 overflow-y-auto mb-4 custom-scrollbar space-y-4 pr-2">
+                        {chatMessages.length === 0 ? (
+                            <div className="h-full flex flex-col items-center justify-center text-slate-500">
+                                <MessageCircle className="w-10 h-10 mb-3 opacity-50" />
+                                <p>Ask any question about the uploaded document.</p>
+                            </div>
+                        ) : (
+                            chatMessages.map((msg, idx) => (
+                                <div key={idx} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                                    <div className={`max-w-[80%] rounded-2xl px-4 py-3 text-sm flex gap-3 ${msg.role === 'user' ? 'bg-indigo-600 text-white rounded-br-none' : 'bg-slate-800 text-slate-200 border border-slate-700 rounded-bl-none'}`}>
+                                        {msg.role === 'model' && <Sparkles className="w-4 h-4 text-indigo-400 shrink-0 mt-0.5" />}
+                                        <div className="leading-relaxed whitespace-pre-line">{msg.text}</div>
+                                    </div>
+                                </div>
+                            ))
+                        )}
+                        <div ref={chatScrollRef} />
+                    </div>
+
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={chatInput}
+                            onChange={(e) => setChatInput(e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && handleChatSend()}
+                            placeholder={!pdfFile ? "Upload a document first..." : isAILocked ? "Upgrade to Unlock AI" : "Ask about this document..."}
+                            disabled={isChatLoading || isAILocked || !pdfFile}
+                            className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 disabled:opacity-50"
+                        />
+                        <button
+                            onClick={handleChatSend}
+                            disabled={isChatLoading || isAILocked || !pdfFile || !chatInput.trim()}
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white p-3 rounded-xl transition-colors"
+                        >
+                            {isChatLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Send className="w-5 h-5" />}
+                        </button>
+                    </div>
+                </div>
+            )}
+
+            {/* Report Tab */}
+            {activeTab === 'report' && (
+                <div className="glass-panel rounded-2xl p-6 min-h-[600px] flex flex-col space-y-6">
+                    <div>
+                        <h3 className="text-lg font-bold text-white mb-1 flex items-center gap-2">
+                            <FileText className="w-5 h-5 text-emerald-400" /> AI Report Generator
+                        </h3>
+                        <p className="text-sm text-slate-400">Generate structured documents, presentations, and spreadsheets from prompts or source files.</p>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Reference Document (Optional)</label>
+                            <input
+                                type="file"
+                                accept=".pdf"
+                                onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
+                                className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-slate-700 file:text-white hover:file:bg-slate-600 file:cursor-pointer bg-slate-900 rounded-lg p-2 border border-slate-700"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">What kind of report do you need?</label>
+                            <textarea
+                                value={reportPrompt}
+                                onChange={(e) => setReportPrompt(e.target.value)}
+                                placeholder="e.g., Generate a Q3 Marketing Strategy presentation with 5 slides based on the attached data..."
+                                className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-emerald-500 min-h-[120px]"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Export Format</label>
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                                {['pdf', 'docx', 'pptx', 'xlsx'].map(fmt => (
+                                    <button
+                                        key={fmt}
+                                        onClick={() => setReportFormat(fmt as any)}
+                                        className={`py-3 px-4 rounded-xl text-sm font-bold uppercase transition-colors ${reportFormat === fmt
+                                            ? 'bg-emerald-600 shadow-lg shadow-emerald-500/20 text-white'
+                                            : 'bg-slate-800 text-slate-400 hover:bg-slate-700'}`}
+                                    >
+                                        .{fmt}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex-1" />
+
+                    <button
+                        onClick={handleGenerateReport}
+                        disabled={isGeneratingReport || isAILocked || !reportPrompt.trim()}
+                        className={`w-full py-4 rounded-xl text-sm font-bold flex items-center justify-center gap-2 transition-colors ${isAILocked ? 'bg-slate-800 text-slate-500 cursor-not-allowed' : 'bg-emerald-600 hover:bg-emerald-700 text-white'
+                            }`}
+                    >
+                        {isGeneratingReport ? <Loader2 className="w-5 h-5 animate-spin" /> : <Sparkles className="w-5 h-5" />}
+                        {isAILocked ? 'Upgrade to Unlock AI' : 'Generate & Download Report'}
+                    </button>
                 </div>
             )}
 
