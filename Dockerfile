@@ -2,7 +2,7 @@
 FROM node:20-alpine AS frontend-build
 WORKDIR /app/frontend
 COPY package*.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY . .
 # Pass env vars as build args so Vite bakes them into the bundle
 ARG VITE_API_URL
