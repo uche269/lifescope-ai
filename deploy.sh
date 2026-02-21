@@ -7,17 +7,7 @@ APP_DIR="/opt/lifescope"
 
 echo "=== deployment started ==="
 
-# 1. Install Dependencies (Git, Docker)
-if ! command -v git &> /dev/null; then
-    echo "Installing Git..."
-    apt-get update && apt-get install -y git
-fi
-
-if ! command -v docker &> /dev/null; then
-    echo "Installing Docker..."
-    curl -fsSL https://get.docker.com -o get-docker.sh
-    sh get-docker.sh
-fi
+# Dependencies (Git, Docker) should already be installed on the VPS instance.
 
 # 2. Setup Directory & Clone
 if [ -d "$APP_DIR" ]; then
