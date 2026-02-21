@@ -31,8 +31,8 @@ const s3Client = new S3Client({
     region: process.env.B2_REGION || 'us-east-005',
     endpoint: process.env.B2_ENDPOINT || 'https://s3.us-east-005.backblazeb2.com',
     credentials: {
-        accessKeyId: process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '005c108392eaea90000000001',
-        secretAccessKey: process.env.B2_APP_KEY || process.env.AWS_SECRET_ACCESS_KEY || 'K005o0Wo7U2yw+E1aszQ5LEqAy6ZXvM',
+        accessKeyId: process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.B2_APP_KEY || process.env.AWS_SECRET_ACCESS_KEY,
     }
 });
 
