@@ -13,6 +13,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { createTransport } from 'nodemailer';
 import multer from 'multer';
+import multerS3 from 'multer-s3';
+import { S3Client, GetObjectCommand } from '@aws-sdk/client-s3';
 import { parse } from 'csv-parse/sync';
 import { readFileSync } from 'fs';
 import { createRequire } from 'module';
@@ -24,8 +26,29 @@ import cron from 'node-cron';
 
 dotenv.config();
 
-// File upload config
-const upload = multer({ dest: 'uploads/', limits: { fileSize: 5 * 1024 * 1024 } });
+// S3 Client Configuration (Backblaze B2)
+const s3Client = new S3Client({
+    region: process.env.B2_REGION || 'us-east-005',
+    endpoint: process.env.B2_ENDPOINT || 'https://s3.us-east-005.backblazeb2.com',
+    credentials: {
+        accessKeyId: process.env.B2_KEY_ID || process.env.AWS_ACCESS_KEY_ID || '005c108392eaea90000000001',
+        secretAccessKey: process.env.B2_APP_KEY || process.env.AWS_SECRET_ACCESS_KEY || 'K005o0Wo7U2yw+E1aszQ5LEqAy6ZXvM',
+    }
+});
+
+const B2_BUCKET = process.env.B2_BUCKET || 'lifescope-db-backups';
+
+// File upload config (Cloud Storage)
+const upload = multer({
+    storage: multerS3({
+        s3: s3Client,
+        bucket: B2_BUCKET,
+        key: function (req, file, cb) {
+            cb(null, `uploads/${Date.now().toString()}-${file.originalname}`);
+        }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 }
+});
 
 // Email transporter (for chat escalation)
 const transporter = process.env.SMTP_EMAIL ? createTransport({
@@ -954,7 +977,12 @@ app.post('/api/finance/upload', ensureAuth, upload.single('statement'), async (r
     try {
         if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
         const month = req.body.month || new Date().toISOString().slice(0, 7);
-        const fileBuffer = readFileSync(req.file.path);
+
+        // Fetch the uploaded file from S3 to parse it into memory
+        const getObjectParams = { Bucket: B2_BUCKET, Key: req.file.key };
+        const s3Response = await s3Client.send(new GetObjectCommand(getObjectParams));
+        const fileBuffer = Buffer.from(await s3Response.Body.transformToByteArray());
+
         const ext = path.extname(req.file.originalname).toLowerCase();
 
         let records = [];
