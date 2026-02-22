@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     CheckCircle2, ShieldCheck, User, Palette,
-    Sun, Moon, LogOut, Trash2, Sparkles, Bell, Mail, Save
+    Sun, Moon, LogOut, Trash2, Sparkles, Bell, Mail, Save, Loader2
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -24,6 +24,8 @@ const Settings: React.FC = () => {
 
     // Delete confirmation
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+    const [testEmailLoading, setTestEmailLoading] = useState(false);
+    const [testEmailSuccess, setTestEmailSuccess] = useState<boolean | null>(null);
     const [deleteInput, setDeleteInput] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [saved, setSaved] = useState(false);
@@ -49,6 +51,25 @@ const Settings: React.FC = () => {
             window.location.reload();
         } catch (e: any) {
             alert("Migration failed: " + e.message);
+        }
+    };
+
+    const handleTestEmail = async () => {
+        setTestEmailLoading(true);
+        setTestEmailSuccess(null);
+        try {
+            const res = await api.post('/auth/test-email');
+            if (res.data.success) {
+                setTestEmailSuccess(true);
+                setTimeout(() => setTestEmailSuccess(null), 5000);
+            } else {
+                setTestEmailSuccess(false);
+            }
+        } catch (err) {
+            console.error(err);
+            setTestEmailSuccess(false);
+        } finally {
+            setTestEmailLoading(false);
         }
     };
 
@@ -362,19 +383,29 @@ const Settings: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Sign Out */}
+                                {/* Test Email Integration */}
                                 <div className="bg-slate-900 rounded-xl p-5">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="text-sm font-medium text-white">Sign Out</p>
-                                            <p className="text-xs text-slate-500 mt-1">End your current session</p>
+                                            <p className="text-sm font-medium text-white flex items-center gap-2">
+                                                <Mail className="w-4 h-4 text-slate-400" />
+                                                Test Email Integration
+                                            </p>
+                                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
+                                                Send a test email to yourself to verify that the Resend or SMTP configuration is working correctly on your server.
+                                            </p>
                                         </div>
-                                        <button
-                                            onClick={() => signOut()}
-                                            className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors"
-                                        >
-                                            <LogOut className="w-4 h-4" /> Sign Out
-                                        </button>
+                                        <div className="flex items-center gap-3">
+                                            {testEmailSuccess === true && <span className="text-xs text-emerald-400 font-medium">Email Sent!</span>}
+                                            {testEmailSuccess === false && <span className="text-xs text-red-400 font-medium">Failed</span>}
+                                            <button
+                                                onClick={handleTestEmail}
+                                                disabled={testEmailLoading}
+                                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
+                                            >
+                                                {testEmailLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Test'}
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 

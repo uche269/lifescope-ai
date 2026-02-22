@@ -16,10 +16,10 @@ import Login from './components/Login';
 import { api, fetchGoals as fetchGoalsApi } from './services/api';
 import { useAuth } from './contexts/AuthContext';
 import { checkIsCompleted } from './utils/activityUtils';
-import { Menu, BrainCircuit } from 'lucide-react'; // Added Menu icon
+import { Menu, BrainCircuit, LogOut } from 'lucide-react'; // Added Menu icon
 
 const MainApp: React.FC = () => {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
   const [goals, setGoals] = useState<Goal[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSidebarOpen, setSidebarOpen] = useState(false); // Sidebar State
@@ -93,17 +93,36 @@ const MainApp: React.FC = () => {
           </div>
           <span className="font-bold text-lg text-white">LifeScope</span>
         </div>
-        <button
-          onClick={() => setSidebarOpen(true)}
-          className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition-colors"
-        >
-          <Menu className="w-6 h-6" />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => signOut()}
+            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition-colors"
+          >
+            <LogOut className="w-5 h-5" />
+          </button>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-900 transition-colors"
+          >
+            <Menu className="w-6 h-6" />
+          </button>
+        </div>
       </div>
 
       <Sidebar isOpen={isSidebarOpen} onClose={() => setSidebarOpen(false)} />
 
       <main className="md:pl-64 min-h-screen transition-all duration-300">
+
+        {/* Top Header Row for Quick Actions (Desktop & Tablet) */}
+        <div className="hidden md:flex justify-end items-center px-8 py-4 sticky top-0 bg-slate-950/80 backdrop-blur-md z-20 border-b border-slate-900/50">
+          <button
+            onClick={() => signOut()}
+            className="flex items-center gap-2 px-3 py-1.5 bg-slate-900 border border-slate-800 hover:bg-slate-800 hover:border-slate-700 text-slate-400 hover:text-white rounded-lg text-sm transition-all shadow-sm"
+          >
+            <LogOut className="w-4 h-4" /> Sign Out
+          </button>
+        </div>
+
         <div className="max-w-7xl mx-auto p-4 md:p-8 pt-6 md:pt-10">
           <NotificationBanner goals={goals} />
           <Routes>

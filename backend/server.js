@@ -448,6 +448,106 @@ app.post('/api/auth/verify', async (req, res) => {
     }
 });
 
+// Request Password Reset OTP
+app.post('/api/auth/request-reset', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: "Email is required" });
+
+        const { rows } = await pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
+        if (rows.length === 0) {
+            // Return success even if not found to prevent email enumeration
+            return res.json({ success: true, message: "If that email exists, a reset code has been sent." });
+        }
+
+        const user = rows[0];
+
+        // Block resetting Google-only accounts if they have no password set
+        if (user.google_id && !user.password_hash) {
+            return res.status(400).json({ error: "This account uses Google Login. Please sign in with Google." });
+        }
+
+        // Generate 6 digit OTP
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+
+        // Save OTP as the verification token (reusing the column for simplicity)
+        await pool.query(
+            'UPDATE public.users SET verification_token = $1 WHERE email = $2',
+            [otp, email]
+        );
+
+        const emailHtml = `<h2>Reset Your Password</h2>
+                           <p>Hello ${user.full_name || 'User'},</p>
+                           <p>You requested a password reset for your LifeScope AI account.</p>
+                           <p>Your 6-digit reset code is: <strong>${otp}</strong></p>
+                           <p>Enter this code on the reset page to create a new password.</p>
+                           <p>If you did not request this, please ignore this email.</p>`;
+
+        if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_placeholder') {
+            await resend.emails.send({
+                from: 'LifeScope AI <support@getlifescope.com>',
+                to: email,
+                subject: 'Your LifeScope Password Reset Code',
+                html: emailHtml
+            });
+            console.log(`✅ Reset OTP sent via Resend to ${email}`);
+        } else if (transporter) {
+            await transporter.sendMail({
+                from: `"LifeScope AI" <${process.env.SMTP_EMAIL}>`,
+                to: email,
+                subject: 'Your LifeScope Password Reset Code',
+                html: emailHtml
+            });
+            console.log(`✅ Reset OTP sent via SMTP to ${email}`);
+        } else {
+            console.log(`⚠️ Alert: Neither Resend nor SMTP configured. Generated OTP for ${email}: ${otp}`);
+        }
+
+        res.json({ success: true, message: "If that email exists, a reset code has been sent." });
+    } catch (err) {
+        console.error('Password reset request error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Verify Password Reset OTP and Set New Password
+app.post('/api/auth/verify-reset', async (req, res) => {
+    try {
+        const { email, otp, newPassword } = req.body;
+
+        if (!email || !otp || !newPassword) {
+            return res.status(400).json({ error: "Email, OTP, and new password are required." });
+        }
+
+        // Verify the OTP mapped to this email
+        const { rows } = await pool.query(
+            'SELECT id FROM public.users WHERE email = $1 AND verification_token = $2',
+            [email, otp]
+        );
+
+        if (rows.length === 0) {
+            return res.status(400).json({ error: "Invalid or expired reset code." });
+        }
+
+        const userId = rows[0].id;
+
+        // Hash the new password
+        const salt = await bcrypt.genSalt(10);
+        const passwordHash = await bcrypt.hash(newPassword, salt);
+
+        // Update password and clear the OTP
+        await pool.query(
+            'UPDATE public.users SET password_hash = $1, verification_token = NULL WHERE id = $2',
+            [passwordHash, userId]
+        );
+
+        res.json({ success: true, message: "Password successfully reset! You can now log in." });
+    } catch (err) {
+        console.error('Password reset verify error:', err);
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // Email/Password Login
 app.post('/api/auth/login', (req, res, next) => {
     passport.authenticate('local', (err, user, info) => {
@@ -619,6 +719,49 @@ const ensureAdmin = async (req, res, next) => {
     if (!rows[0]?.is_admin) return res.status(403).json({ error: 'Admin access required' });
     next();
 };
+
+// Phase 6: Email Testing Endpoint
+app.post('/api/test-email', ensureAuth, async (req, res) => {
+    try {
+        const userEmail = req.user.email;
+        const userName = req.user.full_name || 'LifeScope User';
+
+        // Try Resend first
+        if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_placeholder') {
+            const data = await resend.emails.send({
+                from: 'LifeScope AI <support@getlifescope.com>', // Verified domain
+                to: userEmail,
+                subject: 'LifeScope Email Test Successful!',
+                html: `<h3>Hello ${userName},</h3>
+                       <p>This is a test email from your LifeScope AI dashboard.</p>
+                       <p>If you are receiving this, your Resend API email integration is configured correctly.</p>
+                       <p>Best,<br>LifeScope Assistant</p>`
+            });
+            console.log('✅ Test email sent via Resend:', data);
+            return res.json({ success: true, method: 'resend', data });
+        }
+
+        // Fallback to SMTP
+        if (transporter) {
+            const info = await transporter.sendMail({
+                from: process.env.SMTP_EMAIL,
+                to: userEmail,
+                subject: 'LifeScope Email Test Successful (SMTP)!',
+                html: `<h3>Hello ${userName},</h3>
+                       <p>This is a test email from your LifeScope AI dashboard.</p>
+                       <p>If you are receiving this, your SMTP fallback integration is configured correctly.</p>
+                       <p>Best,<br>LifeScope Assistant</p>`
+            });
+            console.log('✅ Test email sent via SMTP fallback:', info.messageId);
+            return res.json({ success: true, method: 'smtp', messageId: info.messageId });
+        }
+
+        throw new Error('Neither RESEND_API_KEY nor SMTP_EMAIL are fully configured in the environment.');
+    } catch (err) {
+        console.error('❌ Test email failed:', err);
+        res.status(500).json({ error: err.message || 'Failed to send test email' });
+    }
+});
 
 // Data Migration Endpoint (Legacy Recovery)
 app.post('/api/auth/migrate-legacy-data', ensureAuth, ensureAdmin, async (req, res) => {
