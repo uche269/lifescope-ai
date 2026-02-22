@@ -27,6 +27,9 @@ export interface Goal {
   progress: number; // 0 to 100
   activities: Activity[];
   status: 'Not Started' | 'In Progress' | 'Completed';
+  linked_module?: 'finance_savings' | 'health_weight' | null;
+  linked_target_value?: number | null;
+  target?: number; // fallback/legacy
   deadline?: string;
   aiRecommendations?: string;
 }

@@ -64,7 +64,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     title: string,
     category: string,
     priority: 'High' | 'Medium' | 'Low',
-    deadline?: string
+    deadline?: string,
+    linked_module?: 'finance_savings' | 'health_weight' | null,
+    linked_target_value?: number | null
   }>({ title: '', category: '', priority: 'Medium', deadline: '' });
 
   // Activity Editing State
@@ -138,7 +140,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       title: goal.title,
       category: goal.category,
       priority: goal.priority,
-      deadline: goal.deadline || ''
+      deadline: goal.deadline || '',
+      linked_module: goal.linked_module,
+      linked_target_value: goal.linked_target_value
     });
     setShowEditModal(goal.id);
   };
@@ -157,7 +161,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           title: goalForm.title,
           category: goalForm.category,
           priority: goalForm.priority,
-          deadline: goalForm.deadline || null
+          deadline: goalForm.deadline || null,
+          linked_module: goalForm.linked_module || null,
+          linked_target_value: goalForm.linked_target_value || null
         });
 
         setGoals(goals.map(g => g.id === goalForm.id ? {
@@ -165,7 +171,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           title: goalForm.title,
           category: goalForm.category,
           priority: goalForm.priority,
-          deadline: goalForm.deadline
+          deadline: goalForm.deadline,
+          linked_module: goalForm.linked_module,
+          linked_target_value: goalForm.linked_target_value
         } : g));
         setShowEditModal(null);
       } catch (e) { console.error(e); }
@@ -180,7 +188,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           description: '',
           progress: 0,
           status: 'Not Started',
-          deadline: goalForm.deadline || null
+          deadline: goalForm.deadline || null,
+          linked_module: goalForm.linked_module || null,
+          linked_target_value: goalForm.linked_target_value || null
         });
 
         if (data) {
@@ -245,13 +255,18 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           a.id === activityId ? { ...a, isCompleted: newStatus, last_completed_at: newTimestamp || undefined } : a
         );
 
-        // Recalc progress in this closure
-        const completedCount = newActivities.filter(a => checkIsCompleted(a)).length;
-        const progress = newActivities.length ? Math.round((completedCount / newActivities.length) * 100) : 0;
+        // Recalc progress in this closure (ONLY if not linked)
+        let progress = g.progress;
+        let newGoalStatus = g.status;
 
-        let newGoalStatus: 'Not Started' | 'In Progress' | 'Completed' = 'In Progress';
-        if (progress === 100) newGoalStatus = 'Completed';
-        else if (progress === 0) newGoalStatus = 'Not Started';
+        if (!g.linked_module) {
+          const completedCount = newActivities.filter(a => checkIsCompleted(a)).length;
+          progress = newActivities.length ? Math.round((completedCount / newActivities.length) * 100) : 0;
+
+          newGoalStatus = 'In Progress';
+          if (progress === 100) newGoalStatus = 'Completed';
+          else if (progress === 0) newGoalStatus = 'Not Started';
+        }
 
         return { ...g, activities: newActivities, progress, status: newGoalStatus };
       });
@@ -278,7 +293,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     // Update Local
     setGoals(prevGoals => prevGoals.map(g => {
       if (g.id !== goalId) return g;
-      // Recalculate progress with new activity (adds 1 uncompleted)
+      // Recalculate progress with new activity (adds 1 uncompleted) ONLY if not linked
       const newActivities = [...g.activities, {
         id: data.id,
         name: data.name,
@@ -286,8 +301,12 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         frequency: data.frequency,
         deadline: data.deadline
       }];
-      const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
-      const progress = Math.round((completed / newActivities.length) * 100);
+
+      let progress = g.progress;
+      if (!g.linked_module) {
+        const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
+        progress = Math.round((completed / newActivities.length) * 100);
+      }
 
       return {
         ...g,
@@ -296,9 +315,9 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       }
     }));
 
-    // Recalculate based on new total
+    // Recalculate based on new total (ONLY if not linked)
     const goal = goals.find(g => g.id === goalId);
-    if (goal) {
+    if (goal && !goal.linked_module) {
       const newTotal = goal.activities.length + 1;
       const completedCount = goal.activities.filter(a => a.isCompleted).length;
       const newProgress = Math.round((completedCount / newTotal) * 100);
@@ -330,8 +349,11 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
       if (g.id !== goalId) return g;
       const newActivities = g.activities.filter(a => a.id !== activityId);
       // Recalc progress
-      const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
-      const progress = newActivities.length ? Math.round((completed / newActivities.length) * 100) : 0;
+      let progress = g.progress;
+      if (!g.linked_module) {
+        const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
+        progress = newActivities.length ? Math.round((completed / newActivities.length) * 100) : 0;
+      }
 
       return {
         ...g,
@@ -600,6 +622,51 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                   ))}
                 </div>
               </div>
+
+              {/* Linked Module Selector (Phase 4) */}
+              <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-xl p-4 space-y-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Sparkles className="w-4 h-4 text-indigo-400" />
+                  <h4 className="text-sm font-medium text-indigo-300">Automate Progress</h4>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Link to Module</label>
+                    <select
+                      value={goalForm.linked_module || ''}
+                      onChange={(e) => setGoalForm({ ...goalForm, linked_module: (e.target.value as any) || null })}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                    >
+                      <option value="">None (Manual Tracking)</option>
+                      <option value="finance_savings">Finance: Total Savings</option>
+                      <option value="health_weight">Health: Body Weight</option>
+                    </select>
+                  </div>
+
+                  {goalForm.linked_module && (
+                    <div>
+                      <label className="block text-xs font-medium text-slate-400 mb-1">
+                        {goalForm.linked_module === 'health_weight' ? 'Target Weight (kg)' : 'Target Amount'}
+                      </label>
+                      <input
+                        type="number"
+                        value={goalForm.linked_target_value || ''}
+                        onChange={(e) => setGoalForm({ ...goalForm, linked_target_value: parseFloat(e.target.value) || null })}
+                        className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors"
+                        placeholder="e.g. 75"
+                      />
+                    </div>
+                  )}
+                </div>
+                {goalForm.linked_module && (
+                  <p className="text-xs text-indigo-400/80 mt-2">
+                    {goalForm.linked_module === 'finance_savings'
+                      ? 'Progress will automatically update based on your total Income/Savings logged in the Finance tab.'
+                      : 'Progress will automatically update based on your latest weight logged in the Health tab.'}
+                  </p>
+                )}
+              </div>
             </div>
 
             <div className="flex justify-end gap-3 mt-8">
@@ -655,8 +722,10 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
               {/* Progress Bar */}
               <div className="mb-6">
                 <div className="flex justify-between text-xs mb-2">
-                  <span className={goal.progress === 100 ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
-                    {goal.progress === 100 ? 'Completed' : `${goal.progress}% Complete`}
+                  <span className={goal.progress >= (goal.target || 100) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                    {goal.linked_module && goal.target
+                      ? `${goal.progress.toLocaleString()} / ${goal.target.toLocaleString()} ${goal.linked_module === 'health_weight' ? 'kg' : ''}`
+                      : goal.progress === 100 ? 'Completed' : `${goal.progress}% Complete`}
                   </span>
                   {goal.deadline && (
                     <span className="text-slate-500 flex items-center gap-1">
@@ -667,8 +736,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                 </div>
                 <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
                   <div
-                    className={`h-full rounded-full transition-all duration-1000 ease-out ${goal.progress === 100 ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                    style={{ width: `${goal.progress}%` }}
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${goal.progress >= (goal.target || 100) ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                    style={{ width: `${Math.min(100, goal.target ? (goal.progress / goal.target) * 100 : goal.progress)}%` }}
                   ></div>
                 </div>
               </div>

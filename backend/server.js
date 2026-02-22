@@ -772,8 +772,41 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
                         goalMap[a.goal_id].activities.push(a);
                     }
                 });
-                return res.json({ data: Object.values(goalMap), error: null });
+                const finalGoals = Object.values(goalMap);
+
+                // Phase 4: Compute Dynamic Progress for Linked Goals
+                for (let g of finalGoals) {
+                    if (g.linked_module === 'finance_savings') {
+                        // Progress is the sum of all income/deposits
+                        const { rows: trRows } = await pool.query(`SELECT SUM(amount) as total FROM public.finance_transactions WHERE user_id = $1 AND type = 'credit'`, [req.user.id]);
+                        g.progress = parseFloat(trRows[0]?.total || 0);
+                    } else if (g.linked_module === 'health_weight') {
+                        // Progress is the first logged weight
+                        const { rows: wRows } = await pool.query(`SELECT weight FROM public.weight_logs WHERE user_id = $1 ORDER BY date DESC LIMIT 1`, [req.user.id]);
+                        g.progress = parseFloat(wRows[0]?.weight || 0);
+                    }
+                    if (g.linked_target_value) {
+                        g.target = parseFloat(g.linked_target_value);
+                    }
+                }
+
+                return res.json({ data: finalGoals, error: null });
             }
+
+            // Phase 4: Compute Dynamic Progress for Linked Goals (no activities)
+            for (let g of goals) {
+                if (g.linked_module === 'finance_savings') {
+                    const { rows: trRows } = await pool.query(`SELECT SUM(amount) as total FROM public.finance_transactions WHERE user_id = $1 AND type = 'credit'`, [req.user.id]);
+                    g.progress = parseFloat(trRows[0]?.total || 0);
+                } else if (g.linked_module === 'health_weight') {
+                    const { rows: wRows } = await pool.query(`SELECT weight FROM public.weight_logs WHERE user_id = $1 ORDER BY date DESC LIMIT 1`, [req.user.id]);
+                    g.progress = parseFloat(wRows[0]?.weight || 0);
+                }
+                if (g.linked_target_value) {
+                    g.target = parseFloat(g.linked_target_value);
+                }
+            }
+
             return res.json({ data: goals, error: null });
         }
 
