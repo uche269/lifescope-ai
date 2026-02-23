@@ -901,7 +901,7 @@ app.post('/api/finance/upload', ensureAuth, upload.single('statement'), async (r
         }
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-1.5-pro-latest',
             contents: contentsPayload[0],
             config: { responseMimeType: "application/json" }
         });
@@ -975,7 +975,7 @@ app.post('/api/finance/analyze', ensureAuth, async (req, res) => {
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-1.5-pro',
+            model: 'gemini-1.5-pro-latest',
             contents: prompt
         });
 
