@@ -269,7 +269,7 @@ passport.deserializeUser(async (id, done) => {
 passport.use(new GoogleStrategy({
     clientID: process.env.GOOGLE_CLIENT_ID || "mock_client_id",
     clientSecret: process.env.GOOGLE_CLIENT_SECRET || "mock_client_secret",
-    callbackURL: process.env.FRONTEND_URL ? `${process.env.FRONTEND_URL}/api/auth/google/callback` : "/api/auth/google/callback"
+    callbackURL: "/api/auth/google/callback"
 },
     async (accessToken, refreshToken, profile, done) => {
         try {
