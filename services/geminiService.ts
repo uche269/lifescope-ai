@@ -21,7 +21,7 @@ Always end responses by asking "What do you want to add, review, or improve toda
 export const getAIRecommendation = async (goalTitle: string, currentStatus: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
     const prompt = `
       I have a goal: "${goalTitle}". 
       Current status: ${currentStatus}.
@@ -47,7 +47,7 @@ export const getAIRecommendation = async (goalTitle: string, currentStatus: stri
 export const generateScenarioScript = async (scenario: string, level: 'Beginner' | 'Advanced') => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
     const prompt = `
       Scenario: ${scenario}
       Level: ${level}
@@ -76,7 +76,7 @@ export const generateScenarioScript = async (scenario: string, level: 'Beginner'
 export const chatWithAI = async (history: { role: string, parts: { text: string }[] }[], message: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
     const chat = ai.chats.create({
       model,
       history: history,
@@ -95,7 +95,7 @@ export const chatWithAI = async (history: { role: string, parts: { text: string 
 export const analyzeVoice = async (audioBase64: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
     const response = await ai.models.generateContent({
       model,
       contents: {
@@ -115,7 +115,7 @@ export const analyzeVoice = async (audioBase64: string) => {
 export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance') => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash'; // Using Flash with Google Search grounding
+    const model = 'gemini-2.5-flash'; // Using Flash with Google Search grounding
     let prompt = "";
 
     if (topic === 'Sports') {
@@ -158,7 +158,7 @@ export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance')
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-pro';
     const response = await ai.models.generateContent({
       model,
       contents: {
@@ -188,7 +188,7 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
 export const analyzeUrl = async (url: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
 
     const prompt = `
       Access and analyze the content of this website: ${url}
@@ -228,7 +228,7 @@ export const analyzeUrl = async (url: string) => {
 export const generateAnnualReport = async (userData: any) => {
   try {
     const ai = getAI();
-    const MODEL_NAME = 'gemini-1.5-flash';
+    const MODEL_NAME = 'gemini-2.5-pro';
 
     const prompt = `
             You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
@@ -276,7 +276,7 @@ export const generateAnnualReport = async (userData: any) => {
 export const analyzeFoodImage = async (base64Image: string) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-pro';
 
     const prompt = `
       Analyze the food in this image carefully.
@@ -331,7 +331,7 @@ export const analyzeFoodImage = async (base64Image: string) => {
 export const generateMealPlan = async (preferences: any) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-pro';
     const duration = preferences.duration || '7';
     const countryLine = preferences.country ? `Country/Cuisine Preference: ${preferences.country}` : '';
     const ethnicLine = preferences.ethnicGroup ? `Ethnic/Cultural Food Preferences: ${preferences.ethnicGroup}` : '';
@@ -373,7 +373,7 @@ export const generateMealPlan = async (preferences: any) => {
 export const improveDietPlan = async (currentPlan: string, goal: string, userComments: string = "") => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-pro';
 
     const prompt = `
             I have this meal plan: 
@@ -418,7 +418,7 @@ export const chatWithSupport = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-flash';
 
     const historyFormatted = chatHistory.slice(-6).map(m => ({
       role: m.role === 'user' ? 'user' : 'model',
@@ -461,7 +461,7 @@ Keep responses concise and helpful. Do not use markdown formatting. If you canno
 export const parseHealthReport = async (base64Image: string, mimeType: string = 'image/jpeg') => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-pro';
 
     const prompt = `
       You are an expert medical data extractor. 
@@ -505,7 +505,7 @@ export const parseHealthReport = async (base64Image: string, mimeType: string = 
 export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-pro';
 
     const prompt = `
       Interpret these medical test results in plain language:
@@ -552,7 +552,7 @@ export const healthChat = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-pro';
 
     const contextSummary = [];
     if (healthContext.weightLogs?.length) {
@@ -603,7 +603,7 @@ export const chatWithDocument = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-2.0-flash';
+    const model = 'gemini-2.5-pro';
 
     // Truncate document text to avoid token limits
     const truncatedDoc = documentText.slice(0, 30000);
@@ -648,7 +648,7 @@ export const generateReport = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-flash';
+    const model = 'gemini-2.5-pro';
 
     let contextText = '';
     if (documentText) {
