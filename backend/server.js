@@ -918,9 +918,9 @@ app.post('/api/finance/upload', ensureAuth, upload.single('statement'), async (r
 
             for (const t of transactions) {
                 const res = await client.query(
-                \`INSERT INTO public.finance_transactions 
+                    `INSERT INTO public.finance_transactions 
                     (user_id, date, description, amount, type, category, statement_month)
-                    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *\`,
+                    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
                     [userId, t.date, t.description, t.amount, t.type, t.category || 'Other', month]
                 );
                 insertedTransactions.push(res.rows[0]);
@@ -958,13 +958,13 @@ app.post('/api/finance/analyze', ensureAuth, async (req, res) => {
 
         const { GoogleGenAI } = await import('@google/genai');
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        
-        const prompt = \`
-            I am providing a list of all my financial transactions for \${month}.
-            My target savings goal was $\${savingsGoal || 0}.
+
+        const prompt = `
+            I am providing a list of all my financial transactions for ${month}.
+            My target savings goal was $${savingsGoal || 0}.
             
             TRANSACTIONS:
-            \${JSON.stringify(transactions.map(t => ({ date: t.date, desc: t.description, amt: t.amount, type: t.type, cat: t.category })))}
+            ${JSON.stringify(transactions.map(t => ({ date: t.date, desc: t.description, amt: t.amount, type: t.type, cat: t.category })))}
             
             Please provide a brutally honest, analytical review of my spending habits this month.
             1. Suggest where I am overspending.
@@ -972,7 +972,7 @@ app.post('/api/finance/analyze', ensureAuth, async (req, res) => {
             3. Provide 2 actionable changes I can make next month.
             
             Do not use markdown formatting. Write in clear paragraphs. Be financial-advisor professional but direct.
-        \`;
+        `;
 
         const response = await ai.models.generateContent({
             model: 'gemini-1.5-pro',
@@ -1086,16 +1086,16 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
                 const [col, dir] = order.split('.');
                 const safeCol = col.replace(/[^a-z_]/g, '');
                 const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
-                goalsQuery += ` ORDER BY "${safeCol}" ${ safeDir } `;
+                goalsQuery += ` ORDER BY "${safeCol}" ${safeDir} `;
             }
             const { rows: goals } = await pool.query(goalsQuery, values);
 
             // Then get all activities for these goals
             if (goals.length > 0) {
                 const goalIds = goals.map(g => g.id);
-                const placeholders = goalIds.map((_, i) => `$${ i + 1 } `).join(',');
+                const placeholders = goalIds.map((_, i) => `$${i + 1} `).join(',');
                 const { rows: activities } = await pool.query(
-                    `SELECT * FROM public."activities" WHERE goal_id IN(${ placeholders })`,
+                    `SELECT * FROM public."activities" WHERE goal_id IN(${placeholders})`,
                     goalIds
                 );
 
@@ -1161,12 +1161,12 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
             const [col, dir] = order.split('.');
             const safeCol = col.replace(/[^a-z_]/g, '');
             const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
-            query += ` ORDER BY "${safeCol}" ${ safeDir } `;
+            query += ` ORDER BY "${safeCol}" ${safeDir} `;
         }
 
         if (limit) {
             const safeLimit = parseInt(limit, 10);
-            if (safeLimit > 0) query += ` LIMIT ${ safeLimit } `;
+            if (safeLimit > 0) query += ` LIMIT ${safeLimit} `;
         }
 
         const { rows } = await pool.query(query, values);
@@ -1197,9 +1197,9 @@ app.post('/api/data/:table', ensureAuth, async (req, res) => {
         const values = Object.values(payload);
 
         const columnStr = keys.map(k => `"${k}"`).join(', ');
-        const valueStr = keys.map((_, i) => `$${ i + 1 } `).join(', ');
+        const valueStr = keys.map((_, i) => `$${i + 1} `).join(', ');
 
-        const query = `INSERT INTO public."${table}"(${ columnStr }) VALUES(${ valueStr }) RETURNING * `;
+        const query = `INSERT INTO public."${table}"(${columnStr}) VALUES(${valueStr}) RETURNING * `;
 
         const { rows } = await pool.query(query, values);
         res.json({ data: rows[0], error: null });
@@ -1223,18 +1223,18 @@ app.put('/api/data/:table', ensureAuth, async (req, res) => {
     try {
         const keys = Object.keys(payload);
         const values = Object.values(payload);
-        const setStr = keys.map((k, i) => `"${k}" = $${ i + 1 } `).join(', ');
+        const setStr = keys.map((k, i) => `"${k}" = $${i + 1} `).join(', ');
         values.push(id);
 
         // Enforce ownership: only allow updating records that belong to the logged-in user
         let query;
         if (table === 'activities') {
             // Activities don't have user_id directly — verify via parent goal
-            query = `UPDATE public."activities" SET ${ setStr } WHERE id = $${ values.length }
-                     AND goal_id IN(SELECT id FROM public."goals" WHERE user_id = $${ values.length + 1 }) RETURNING * `;
+            query = `UPDATE public."activities" SET ${setStr} WHERE id = $${values.length}
+                     AND goal_id IN(SELECT id FROM public."goals" WHERE user_id = $${values.length + 1}) RETURNING * `;
             values.push(req.user.id);
         } else {
-            query = `UPDATE public."${table}" SET ${ setStr } WHERE id = $${ values.length } AND user_id = $${ values.length + 1 } RETURNING * `;
+            query = `UPDATE public."${table}" SET ${setStr} WHERE id = $${values.length} AND user_id = $${values.length + 1} RETURNING * `;
             values.push(req.user.id);
         }
         const { rows } = await pool.query(query, values);
@@ -1324,12 +1324,12 @@ app.get('/api/admin/users', ensureAuth, ensureAdmin, async (req, res) => {
 app.get('/api/admin/stats', ensureAuth, ensureAdmin, async (req, res) => {
     try {
         const { rows: [stats] } = await pool.query(`
-                SELECT
-                COUNT(*) as total_users,
-                    COUNT(*) FILTER(WHERE plan = 'pro') as pro_users,
-                        COUNT(*) FILTER(WHERE plan = 'premium') as premium_users,
-                            COUNT(*) FILTER(WHERE trial_ends_at > NOW()) as active_trials,
-                                COUNT(*) FILTER(WHERE last_login > NOW() - INTERVAL '7 days') as active_week
+        SELECT
+        COUNT(*) as total_users,
+            COUNT(*) FILTER(WHERE plan = 'pro') as pro_users,
+                COUNT(*) FILTER(WHERE plan = 'premium') as premium_users,
+                    COUNT(*) FILTER(WHERE trial_ends_at > NOW()) as active_trials,
+                        COUNT(*) FILTER(WHERE last_login > NOW() - INTERVAL '7 days') as active_week
             FROM public.users
         `);
         res.json({ data: stats, error: null });
@@ -1474,7 +1474,7 @@ app.post('/api/finance/upload', ensureAuth, upload.single('statement'), async (r
 
             const { rows } = await pool.query(
                 `INSERT INTO public.finance_transactions(user_id, date, description, amount, type, category, balance, statement_month)
-                VALUES($1, $2, $3, $4, $5, $6, $7, $8) RETURNING * `,
+        VALUES($1, $2, $3, $4, $5, $6, $7, $8) RETURNING * `,
                 [req.user.id, rec.date, rec.description, rec.amount, rec.type, category, rec.balance || 0, month]
             );
             transactions.push(rows[0]);
@@ -1517,7 +1517,7 @@ app.get('/api/finance/summary', ensureAuth, async (req, res) => {
         }
         const { rows } = await pool.query(
             `SELECT category, SUM(amount) as total, type 
-             FROM public.finance_transactions WHERE user_id = $1${ whereMonth }
+             FROM public.finance_transactions WHERE user_id = $1${whereMonth}
              GROUP BY category, type ORDER BY total DESC`,
             values
         );
@@ -1545,16 +1545,16 @@ app.post('/api/finance/analyze', ensureAuth, checkAIQuota, async (req, res) => {
 
         // Build prompt for AI analysis
         const analysis = `Based on this month's data:
-                Income: ₦${ totalIncome.toLocaleString() }
-                Expenses: ₦${ totalExpenses.toLocaleString() }
-                Net: ₦${ (totalIncome - totalExpenses).toLocaleString() }
-Category breakdown: ${ Object.entries(categories).map(([k, v]) => `${k}: ₦${Number(v).toLocaleString()}`).join(', ') }
-Savings goal: ₦${ (savingsGoal || 0).toLocaleString() }
+        Income: ₦${totalIncome.toLocaleString()}
+        Expenses: ₦${totalExpenses.toLocaleString()}
+        Net: ₦${(totalIncome - totalExpenses).toLocaleString()}
+Category breakdown: ${Object.entries(categories).map(([k, v]) => `${k}: ₦${Number(v).toLocaleString()}`).join(', ')}
+Savings goal: ₦${(savingsGoal || 0).toLocaleString()}
 
-                Recommendations:
-                1. Your biggest spending category is ${ Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A' }.
-                2. To save ₦${ (savingsGoal || 0).toLocaleString() }, consider reducing spending in non - essential categories.
-3. ${ totalIncome > totalExpenses ? 'You are saving money this month. Keep it up!' : 'You are spending more than you earn. Review your expenses.' } `;
+        Recommendations:
+        1. Your biggest spending category is ${Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'}.
+        2. To save ₦${(savingsGoal || 0).toLocaleString()}, consider reducing spending in non - essential categories.
+3. ${totalIncome > totalExpenses ? 'You are saving money this month. Keep it up!' : 'You are spending more than you earn. Review your expenses.'} `;
 
         res.json({ analysis });
     } catch (err) {
@@ -1618,21 +1618,21 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
         );
 
         // Build email body
-        const chatTranscript = (messages || []).map(m => `${ m.role.toUpperCase() }: ${ m.text } `).join('\n\n');
+        const chatTranscript = (messages || []).map(m => `${m.role.toUpperCase()}: ${m.text} `).join('\n\n');
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
 
         if (transporter && adminEmail) {
             await transporter.sendMail({
-                from: `LifeScope AI < ${ process.env.SMTP_EMAIL }> `,
+                from: `LifeScope AI < ${process.env.SMTP_EMAIL}> `,
                 to: adminEmail,
-                subject: `[LifeScope Support] Escalation from ${ userName || 'User' } `,
-                text: `Support escalation from ${ userName } (${ userEmail }) \n\nChat Transcript: \n${ chatTranscript } `,
+                subject: `[LifeScope Support] Escalation from ${userName || 'User'} `,
+                text: `Support escalation from ${userName} (${userEmail}) \n\nChat Transcript: \n${chatTranscript} `,
                 html: `< h2 > Support Escalation</h2 >
                        <p><strong>User:</strong> ${userName} (${userEmail})</p>
                        <h3>Chat Transcript</h3>
                        <pre style="background:#f4f4f4;padding:16px;border-radius:8px;">${chatTranscript}</pre>`
             });
-            console.log(`📧 Escalation email sent for user ${ userEmail }`);
+            console.log(`📧 Escalation email sent for user ${userEmail}`);
         } else {
             console.warn('⚠️ Email not configured. Escalation logged but not emailed.');
         }
@@ -1692,7 +1692,7 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
         }
 
         const adminEmail = process.env.SMTP_EMAIL || 'support@getlifescope.com';
-        const chatHtml = messages.map(m => `< b > ${ m.role.toUpperCase() }:</b > <p>${m.text}</p>`).join('<hr/>');
+        const chatHtml = messages.map(m => `< b > ${m.role.toUpperCase()}:</b > <p>${m.text}</p>`).join('<hr/>');
 
         const html = `< h2 > Chat Escalation Alert</h2 >
                       <p><b>User:</b> ${userName || 'Unknown'} (${userEmail || 'Unknown'})</p>
@@ -1701,9 +1701,9 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
 
         if (transporter && process.env.SMTP_EMAIL) {
             await transporter.sendMail({
-                from: `"LifeScope System" < ${ process.env.SMTP_EMAIL }> `,
+                from: `"LifeScope System" < ${process.env.SMTP_EMAIL}> `,
                 to: adminEmail,
-                subject: `Support Escalation: ${ userName || 'User' } `,
+                subject: `Support Escalation: ${userName || 'User'} `,
                 html: html
             });
             console.log("✅ Chat Escalation sent via SMTP");
@@ -1711,7 +1711,7 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
             await resend.emails.send({
                 from: 'LifeScope System <support@getlifescope.com>',
                 to: adminEmail,
-                subject: `Support Escalation: ${ userName || 'User' } `,
+                subject: `Support Escalation: ${userName || 'User'} `,
                 html: html
             });
             console.log("✅ Chat Escalation sent via Resend");
@@ -1770,23 +1770,23 @@ const sendMonthlySummaries = async () => {
             );
 
             if (goals.length > 0) {
-                const goalListHtml = goals.map(g => `< li > <strong>${g.title}</strong>: ${ g.progress } / ${g.target}</li > `).join('');
+                const goalListHtml = goals.map(g => `< li > <strong>${g.title}</strong>: ${g.progress} / ${g.target}</li > `).join('');
 
                 try {
                     await resend.emails.send({
                         from: 'LifeScope AI <support@getlifescope.com>', // Verified domain
                         to: user.email,
                         subject: 'Your Monthly LifeScope Report',
-                        html: `< h2 > Hello ${ user.full_name || 'there' } !</h2 >
+                        html: `< h2 > Hello ${user.full_name || 'there'} !</h2 >
                                <p>Here is your monthly check-in from LifeScope AI. You have some active goals waiting for your attention:</p>
                                <ul>${goalListHtml}</ul>
                                <p>Log in to update your progress and keep up the great work!</p>
                                <br/>
                                <p>Best regards,<br/>LifeScope AI</p>`
                     });
-                    console.log(`✅ Monthly email sent to ${ user.email } `);
+                    console.log(`✅ Monthly email sent to ${user.email} `);
                 } catch (emailErr) {
-                    console.error(`❌ Failed to send email to ${ user.email }: `, emailErr);
+                    console.error(`❌ Failed to send email to ${user.email}: `, emailErr);
                 }
             }
         }
@@ -1814,5 +1814,5 @@ app.post('/api/email/trigger-monthly', ensureAuth, ensureAdmin, async (req, res)
 
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${ PORT } `);
+    console.log(`Server running on port ${PORT} `);
 });
