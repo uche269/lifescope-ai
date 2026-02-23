@@ -71,6 +71,7 @@ const Health: React.FC = () => {
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     const [isImprovingPlan, setIsImprovingPlan] = useState(false);
     const [aiSuggestion, setAiSuggestion] = useState<{ critique: string, revisedPlan: string } | null>(null);
+    const [planComments, setPlanComments] = useState('');
 
     const [planPrefs, setPlanPrefs] = useState<MealPlanPreferences>({
         goal: 'Lose Weight',
@@ -101,7 +102,7 @@ const Health: React.FC = () => {
             const [wData, mData, fData] = await Promise.all([
                 api.get('weight_logs', { orderBy: 'date', ascending: 'true' }),
                 api.get('measurements', { orderBy: 'date', ascending: 'true' }),
-                api.get('food_logs', { orderBy: 'date', limit: '20' })
+                api.get('food_logs', { orderBy: 'date', limit: '50' })
             ]);
             if (Array.isArray(wData)) setWeightLogs(wData);
             if (Array.isArray(mData)) setMeasurements(mData);
@@ -306,9 +307,10 @@ const Health: React.FC = () => {
     const handleImprovePlan = async () => {
         if (!mealPlan.trim()) return;
         setIsImprovingPlan(true);
-        const result = await improveDietPlan(mealPlan, planPrefs.goal);
+        const result = await improveDietPlan(mealPlan, planPrefs.goal, planComments);
         if (result) {
             setAiSuggestion(result);
+            setPlanComments('');
         }
         setIsImprovingPlan(false);
     };
@@ -371,6 +373,8 @@ const Health: React.FC = () => {
         const file = e.target.files?.[0];
         if (!file) return;
 
+        const fileType = file.type || 'image/jpeg';
+
         // Convert to Base64
         const reader = new FileReader();
         reader.onload = async (event) => {
@@ -382,7 +386,7 @@ const Health: React.FC = () => {
 
             setIsParsingReport(true);
             try {
-                const parsedFields = await parseHealthReport(base64String);
+                const parsedFields = await parseHealthReport(base64String, fileType);
                 if (parsedFields && parsedFields.length > 0) {
                     setTestFields(parsedFields);
                 } else {
@@ -936,6 +940,14 @@ const Health: React.FC = () => {
                                     <CalendarCheck className="w-5 h-5 text-emerald-400" /> Your Plan
                                 </h3>
                                 <div className="flex gap-2">
+                                    <input
+                                        type="text"
+                                        placeholder="Add instructions (e.g. 'less carbs')"
+                                        className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-sm text-white focus:outline-none focus:border-indigo-500 min-w-[200px]"
+                                        value={planComments}
+                                        onChange={(e) => setPlanComments(e.target.value)}
+                                        onKeyDown={(e) => { if (e.key === 'Enter') handleImprovePlan(); }}
+                                    />
                                     <button
                                         onClick={handleImprovePlan}
                                         disabled={isImprovingPlan || !mealPlan}

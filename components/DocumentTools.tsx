@@ -69,6 +69,7 @@ const DocumentTools: React.FC = () => {
     const [reportPrompt, setReportPrompt] = useState('');
     const [reportFormat, setReportFormat] = useState<'pdf' | 'docx' | 'xlsx'>('pdf');
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+    const [templateFile, setTemplateFile] = useState<File | null>(null);
 
     // --- Helper Functions ---
     const hexToRgb = (hex: string) => {
@@ -333,11 +334,19 @@ const DocumentTools: React.FC = () => {
 
         try {
             let documentText = '';
+            let templateText = '';
             if (pdfFile) {
                 documentText = await extractTextFromPDF(pdfFile);
             }
+            if (templateFile) {
+                if (templateFile.type.includes('pdf')) {
+                    templateText = await extractTextFromPDF(templateFile);
+                } else {
+                    templateText = await templateFile.text();
+                }
+            }
 
-            const reportContent = await generateReport(reportPrompt, documentText, reportFormat);
+            const reportContent = await generateReport(reportPrompt, documentText, reportFormat, templateText);
 
             // We have the raw report content. Depending on format, we'd normally call 
             // the respective generation library (docx, pptxgenjs, xlsx, jspdf) here.
@@ -740,6 +749,20 @@ const DocumentTools: React.FC = () => {
                                 onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
                                 className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-slate-700 file:text-white hover:file:bg-slate-600 file:cursor-pointer bg-slate-900 rounded-lg p-2 border border-slate-700"
                             />
+                        </div>
+
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <label className="block text-sm font-medium text-slate-300">Custom Template (Optional)</label>
+                                <span className="text-xs text-indigo-400 bg-indigo-500/10 px-2 py-0.5 rounded-full">Pro Feature</span>
+                            </div>
+                            <input
+                                type="file"
+                                accept=".pdf,.txt,.md"
+                                onChange={(e) => setTemplateFile(e.target.files?.[0] || null)}
+                                className="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-slate-700 file:text-white hover:file:bg-slate-600 file:cursor-pointer bg-indigo-900/10 rounded-lg p-2 border border-indigo-500/30"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Upload a PDF, TXT, or Markdown file with the exact structure you want the AI to follow.</p>
                         </div>
 
                         <div>

@@ -187,7 +187,7 @@ const Dashboard: React.FC<DashboardProps> = ({ goals }) => {
     return deadlineDate < todayDate;
   });
 
-  const userNameToShow = user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'there';
+  const userNameToShow = user?.full_name?.split(' ')[0] || user?.user_metadata?.first_name || user?.user_metadata?.full_name?.split(' ')[0] || 'there';
 
   if (showOnboarding) {
     return <OnboardingWizard onComplete={handleOnboardingComplete} userName={userNameToShow} />;

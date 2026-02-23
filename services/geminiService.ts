@@ -370,7 +370,7 @@ export const generateMealPlan = async (preferences: any) => {
   }
 };
 
-export const improveDietPlan = async (currentPlan: string, goal: string) => {
+export const improveDietPlan = async (currentPlan: string, goal: string, userComments: string = "") => {
   try {
     const ai = getAI();
     const model = 'gemini-2.0-flash';
@@ -381,6 +381,7 @@ export const improveDietPlan = async (currentPlan: string, goal: string) => {
             ${currentPlan}
             """
             My goal is: ${goal}.
+            ${userComments ? `\nUSER COMMENTS / REQUESTED CHANGES:\n"${userComments}"\n\nPlease ensure your revised plan directly addresses these comments.` : ''}
 
             Please analyze this plan. 
             1. Provide a short critique (what is good, what is missing).
@@ -457,7 +458,7 @@ Keep responses concise and helpful. Do not use markdown formatting. If you canno
 
 // --- Health Consultant Services ---
 
-export const parseHealthReport = async (base64Image: string) => {
+export const parseHealthReport = async (base64Image: string, mimeType: string = 'image/jpeg') => {
   try {
     const ai = getAI();
     const model = 'gemini-1.5-pro';
@@ -481,7 +482,7 @@ export const parseHealthReport = async (base64Image: string) => {
       model,
       contents: {
         parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+          { inlineData: { mimeType: mimeType, data: base64Image } },
           { text: prompt }
         ]
       },
@@ -642,7 +643,8 @@ If the user asks you to summarize, extract data, find specific information, or e
 export const generateReport = async (
   prompt: string,
   documentText?: string,
-  format: 'pdf' | 'docx' | 'xlsx' = 'pdf'
+  format: 'pdf' | 'docx' | 'xlsx' = 'pdf',
+  templateText?: string
 ) => {
   try {
     const ai = getAI();
@@ -661,6 +663,7 @@ export const generateReport = async (
 
     const systemPrompt = `You are a professional report generation AI. 
 ${contextText}
+${templateText ? `REQUIRED TEMPLATE STRUCTURE:\n---\n${templateText.slice(0, 15000)}\n---\nCRITICAL: You MUST format your generated response to strictly match the layout, headings, style, and outline of the template provided above. Fill in the requested data without breaking the template's structure.\n\n` : ''}
 The user wants you to generate a report based on this prompt: "${prompt}"
 
 Format requirement: ${formatInstructions[format]}

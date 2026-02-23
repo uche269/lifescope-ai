@@ -26,6 +26,9 @@ import cron from 'node-cron';
 
 dotenv.config();
 
+import Papa from 'papaparse';
+
+// Storage Config
 // S3 Client Configuration (Backblaze B2)
 const s3Client = new S3Client({
     region: process.env.B2_REGION || 'us-east-005',
@@ -792,6 +795,197 @@ app.post('/api/auth/migrate-legacy-data', ensureAuth, ensureAdmin, async (req, r
     }
 });
 
+// --- Finance Routes ---
+
+// Upload Statement
+app.post('/api/finance/upload', ensureAuth, upload.single('statement'), async (req, res) => {
+    try {
+        const file = req.file;
+        const month = req.body.month;
+        const userId = req.user.id;
+
+        if (!file || !month) {
+            return res.status(400).json({ error: "Statement file and month are required" });
+        }
+
+        const isCSV = file.originalname.toLowerCase().endsWith('.csv') || file.mimetype === 'text/csv';
+
+        if (isCSV) {
+            // Parse CSV directly using PapaParse
+            // S3 files have .location (URL), local multer uses .path
+            // We need to fetch the file if it's securely stored in S3 config or fs
+            let csvData = "";
+            if (file.location) {
+                const response = await fetch(file.location);
+                csvData = await response.text();
+            } else if (file.path) {
+                const fs = await import('fs');
+                csvData = fs.readFileSync(file.path, 'utf8');
+            } else if (file.buffer) {
+                csvData = file.buffer.toString('utf8');
+            }
+
+            const parsed = Papa.parse(csvData, { header: true, skipEmptyLines: true });
+
+            // Map common bank CSV fields. This is rudimentary and requires a specific format usually.
+            // A more robust app would use the AI to parse even CSVs for consistency.
+            // For now, let's just send the raw text data to Gemini to parse like we do PDFs, 
+            // since Gemini handles arbitrary formats beautifully.
+        }
+
+        // --- Use Gemini to extract transactions from the file ---
+        // We'll read the file content (if text) or use the URL/Buffer for Gemini.
+        // For simplicity and to reuse our powerful AI stack:
+
+        let textContent = "";
+        let base64Pdf = "";
+        const isPdf = file.originalname.toLowerCase().endsWith('.pdf') || file.mimetype === 'application/pdf';
+
+        if (file.location) {
+            const response = await fetch(file.location);
+            if (isCSV) {
+                textContent = await response.text();
+            } else if (isPdf) {
+                const arrayBuffer = await response.arrayBuffer();
+                base64Pdf = Buffer.from(arrayBuffer).toString('base64');
+            } else {
+                return res.status(400).json({ error: "Only CSV and PDF formats are supported." });
+            }
+        } else if (file.path) {
+            const fs = await import('fs');
+            if (isCSV) {
+                textContent = fs.readFileSync(file.path, 'utf8');
+            } else if (isPdf) {
+                base64Pdf = fs.readFileSync(file.path, { encoding: 'base64' });
+            } else {
+                return res.status(400).json({ error: "Only CSV and PDF formats are fully supported in this demo endpoint." });
+            }
+        } else if (file.buffer) {
+            if (isCSV) {
+                textContent = file.buffer.toString('utf8');
+            } else if (isPdf) {
+                base64Pdf = file.buffer.toString('base64');
+            }
+        }
+
+        // Use Gemini to structure the data into our JSON format
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+        const prompt = `
+            Parse the following bank statement data into a JSON array of transactions.
+            Each transaction MUST have this exact structure:
+            {
+                "date": "YYYY-MM-DD",
+                "description": "Cleaned up description",
+                "amount": number (positive),
+                "type": "credit" or "debit",
+                "category": "Food & Dining" | "Transport" | "Bills & Utilities" | "Entertainment" | "Shopping" | "Health" | "Savings" | "Transfer" | "Income" | "Other"
+            }
+            
+            Only return the JSON array, no markdown marking.
+            Data:
+            ${isCSV ? textContent.slice(0, 30000) : "Attached as inlineData document."}
+        `;
+
+        const contentsPayload = [];
+        if (isPdf && base64Pdf) {
+            contentsPayload.push({
+                parts: [
+                    { inlineData: { mimeType: "application/pdf", data: base64Pdf } },
+                    { text: prompt }
+                ]
+            });
+        } else {
+            contentsPayload.push(prompt);
+        }
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-1.5-pro',
+            contents: contentsPayload[0],
+            config: { responseMimeType: "application/json" }
+        });
+
+        const jsonStr = response.text.replace(/\`\`\`json/g, '').replace(/\`\`\`/g, '').trim();
+        const transactions = JSON.parse(jsonStr);
+
+        const client = await pool.connect();
+        const insertedTransactions = [];
+        try {
+            await client.query('BEGIN');
+            // Check if month is already processed to prevent duplicates (rudimentary check)
+            await client.query('DELETE FROM public.finance_transactions WHERE user_id = $1 AND statement_month = $2', [userId, month]);
+
+            for (const t of transactions) {
+                const res = await client.query(
+                \`INSERT INTO public.finance_transactions 
+                    (user_id, date, description, amount, type, category, statement_month)
+                    VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *\`,
+                    [userId, t.date, t.description, t.amount, t.type, t.category || 'Other', month]
+                );
+                insertedTransactions.push(res.rows[0]);
+            }
+            await client.query('COMMIT');
+        } catch (e) {
+            await client.query('ROLLBACK');
+            throw e;
+        } finally {
+            client.release();
+        }
+
+        res.json({ success: true, data: insertedTransactions });
+
+    } catch (err) {
+        console.error("Finance upload error:", err);
+        res.status(500).json({ error: "Failed to process statement" });
+    }
+});
+
+// Analyze Budget
+app.post('/api/finance/analyze', ensureAuth, async (req, res) => {
+    try {
+        const { month, savingsGoal } = req.body;
+        const userId = req.user.id;
+
+        const { rows: transactions } = await pool.query(
+            'SELECT * FROM public.finance_transactions WHERE user_id = $1 AND statement_month = $2',
+            [userId, month]
+        );
+
+        if (transactions.length === 0) {
+            return res.json({ analysis: "No transactions found for this month to analyze." });
+        }
+
+        const { GoogleGenAI } = await import('@google/genai');
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        
+        const prompt = \`
+            I am providing a list of all my financial transactions for \${month}.
+            My target savings goal was $\${savingsGoal || 0}.
+            
+            TRANSACTIONS:
+            \${JSON.stringify(transactions.map(t => ({ date: t.date, desc: t.description, amt: t.amount, type: t.type, cat: t.category })))}
+            
+            Please provide a brutally honest, analytical review of my spending habits this month.
+            1. Suggest where I am overspending.
+            2. Tell me if I realistically hit my savings goal.
+            3. Provide 2 actionable changes I can make next month.
+            
+            Do not use markdown formatting. Write in clear paragraphs. Be financial-advisor professional but direct.
+        \`;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-1.5-pro',
+            contents: prompt
+        });
+
+        res.json({ analysis: response.text });
+    } catch (err) {
+        console.error("Finance analysis error:", err);
+        res.status(500).json({ error: "Failed to analyze finances" });
+    }
+});
+
 // Health Check
 app.get('/api/health', async (req, res) => {
     try {
@@ -892,16 +1086,16 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
                 const [col, dir] = order.split('.');
                 const safeCol = col.replace(/[^a-z_]/g, '');
                 const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
-                goalsQuery += ` ORDER BY "${safeCol}" ${safeDir}`;
+                goalsQuery += ` ORDER BY "${safeCol}" ${ safeDir } `;
             }
             const { rows: goals } = await pool.query(goalsQuery, values);
 
             // Then get all activities for these goals
             if (goals.length > 0) {
                 const goalIds = goals.map(g => g.id);
-                const placeholders = goalIds.map((_, i) => `$${i + 1}`).join(',');
+                const placeholders = goalIds.map((_, i) => `$${ i + 1 } `).join(',');
                 const { rows: activities } = await pool.query(
-                    `SELECT * FROM public."activities" WHERE goal_id IN (${placeholders})`,
+                    `SELECT * FROM public."activities" WHERE goal_id IN(${ placeholders })`,
                     goalIds
                 );
 
@@ -967,12 +1161,12 @@ app.get('/api/data/:table', ensureAuth, async (req, res) => {
             const [col, dir] = order.split('.');
             const safeCol = col.replace(/[^a-z_]/g, '');
             const safeDir = dir === 'desc' ? 'DESC' : 'ASC';
-            query += ` ORDER BY "${safeCol}" ${safeDir}`;
+            query += ` ORDER BY "${safeCol}" ${ safeDir } `;
         }
 
         if (limit) {
             const safeLimit = parseInt(limit, 10);
-            if (safeLimit > 0) query += ` LIMIT ${safeLimit}`;
+            if (safeLimit > 0) query += ` LIMIT ${ safeLimit } `;
         }
 
         const { rows } = await pool.query(query, values);
@@ -1003,9 +1197,9 @@ app.post('/api/data/:table', ensureAuth, async (req, res) => {
         const values = Object.values(payload);
 
         const columnStr = keys.map(k => `"${k}"`).join(', ');
-        const valueStr = keys.map((_, i) => `$${i + 1}`).join(', ');
+        const valueStr = keys.map((_, i) => `$${ i + 1 } `).join(', ');
 
-        const query = `INSERT INTO public."${table}" (${columnStr}) VALUES (${valueStr}) RETURNING *`;
+        const query = `INSERT INTO public."${table}"(${ columnStr }) VALUES(${ valueStr }) RETURNING * `;
 
         const { rows } = await pool.query(query, values);
         res.json({ data: rows[0], error: null });
@@ -1029,18 +1223,18 @@ app.put('/api/data/:table', ensureAuth, async (req, res) => {
     try {
         const keys = Object.keys(payload);
         const values = Object.values(payload);
-        const setStr = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
+        const setStr = keys.map((k, i) => `"${k}" = $${ i + 1 } `).join(', ');
         values.push(id);
 
         // Enforce ownership: only allow updating records that belong to the logged-in user
         let query;
         if (table === 'activities') {
             // Activities don't have user_id directly — verify via parent goal
-            query = `UPDATE public."activities" SET ${setStr} WHERE id = $${values.length}
-                     AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $${values.length + 1}) RETURNING *`;
+            query = `UPDATE public."activities" SET ${ setStr } WHERE id = $${ values.length }
+                     AND goal_id IN(SELECT id FROM public."goals" WHERE user_id = $${ values.length + 1 }) RETURNING * `;
             values.push(req.user.id);
         } else {
-            query = `UPDATE public."${table}" SET ${setStr} WHERE id = $${values.length} AND user_id = $${values.length + 1} RETURNING *`;
+            query = `UPDATE public."${table}" SET ${ setStr } WHERE id = $${ values.length } AND user_id = $${ values.length + 1 } RETURNING * `;
             values.push(req.user.id);
         }
         const { rows } = await pool.query(query, values);
@@ -1069,7 +1263,7 @@ app.delete('/api/data/:table', ensureAuth, async (req, res) => {
         if (table === 'activities') {
             // Activities don't have user_id — verify via parent goal
             const checkQuery = `SELECT id FROM public."activities" WHERE id = $1 
-                                AND goal_id IN (SELECT id FROM public."goals" WHERE user_id = $2)`;
+                                AND goal_id IN(SELECT id FROM public."goals" WHERE user_id = $2)`;
             const { rows } = await pool.query(checkQuery, [id, req.user.id]);
 
             if (rows.length === 0) {
@@ -1130,12 +1324,12 @@ app.get('/api/admin/users', ensureAuth, ensureAdmin, async (req, res) => {
 app.get('/api/admin/stats', ensureAuth, ensureAdmin, async (req, res) => {
     try {
         const { rows: [stats] } = await pool.query(`
-            SELECT 
+                SELECT
                 COUNT(*) as total_users,
-                COUNT(*) FILTER (WHERE plan = 'pro') as pro_users,
-                COUNT(*) FILTER (WHERE plan = 'premium') as premium_users,
-                COUNT(*) FILTER (WHERE trial_ends_at > NOW()) as active_trials,
-                COUNT(*) FILTER (WHERE last_login > NOW() - INTERVAL '7 days') as active_week
+                    COUNT(*) FILTER(WHERE plan = 'pro') as pro_users,
+                        COUNT(*) FILTER(WHERE plan = 'premium') as premium_users,
+                            COUNT(*) FILTER(WHERE trial_ends_at > NOW()) as active_trials,
+                                COUNT(*) FILTER(WHERE last_login > NOW() - INTERVAL '7 days') as active_week
             FROM public.users
         `);
         res.json({ data: stats, error: null });
@@ -1279,8 +1473,8 @@ app.post('/api/finance/upload', ensureAuth, upload.single('statement'), async (r
             else if (rec.type === 'credit') category = 'Income';
 
             const { rows } = await pool.query(
-                `INSERT INTO public.finance_transactions (user_id, date, description, amount, type, category, balance, statement_month)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING *`,
+                `INSERT INTO public.finance_transactions(user_id, date, description, amount, type, category, balance, statement_month)
+                VALUES($1, $2, $3, $4, $5, $6, $7, $8) RETURNING * `,
                 [req.user.id, rec.date, rec.description, rec.amount, rec.type, category, rec.balance || 0, month]
             );
             transactions.push(rows[0]);
@@ -1323,7 +1517,7 @@ app.get('/api/finance/summary', ensureAuth, async (req, res) => {
         }
         const { rows } = await pool.query(
             `SELECT category, SUM(amount) as total, type 
-             FROM public.finance_transactions WHERE user_id = $1${whereMonth}
+             FROM public.finance_transactions WHERE user_id = $1${ whereMonth }
              GROUP BY category, type ORDER BY total DESC`,
             values
         );
@@ -1351,16 +1545,16 @@ app.post('/api/finance/analyze', ensureAuth, checkAIQuota, async (req, res) => {
 
         // Build prompt for AI analysis
         const analysis = `Based on this month's data:
-Income: ₦${totalIncome.toLocaleString()}
-Expenses: ₦${totalExpenses.toLocaleString()}
-Net: ₦${(totalIncome - totalExpenses).toLocaleString()}
-Category breakdown: ${Object.entries(categories).map(([k, v]) => `${k}: ₦${Number(v).toLocaleString()}`).join(', ')}
-Savings goal: ₦${(savingsGoal || 0).toLocaleString()}
+                Income: ₦${ totalIncome.toLocaleString() }
+                Expenses: ₦${ totalExpenses.toLocaleString() }
+                Net: ₦${ (totalIncome - totalExpenses).toLocaleString() }
+Category breakdown: ${ Object.entries(categories).map(([k, v]) => `${k}: ₦${Number(v).toLocaleString()}`).join(', ') }
+Savings goal: ₦${ (savingsGoal || 0).toLocaleString() }
 
-Recommendations:
-1. Your biggest spending category is ${Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A'}.
-2. To save ₦${(savingsGoal || 0).toLocaleString()}, consider reducing spending in non-essential categories.
-3. ${totalIncome > totalExpenses ? 'You are saving money this month. Keep it up!' : 'You are spending more than you earn. Review your expenses.'}`;
+                Recommendations:
+                1. Your biggest spending category is ${ Object.entries(categories).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A' }.
+                2. To save ₦${ (savingsGoal || 0).toLocaleString() }, consider reducing spending in non - essential categories.
+3. ${ totalIncome > totalExpenses ? 'You are saving money this month. Keep it up!' : 'You are spending more than you earn. Review your expenses.' } `;
 
         res.json({ analysis });
     } catch (err) {
@@ -1389,7 +1583,7 @@ app.post('/api/chat/log', ensureAuth, async (req, res) => {
             );
         } else {
             await pool.query(
-                `INSERT INTO public.chat_logs (user_id, messages) VALUES ($1, $2)`,
+                `INSERT INTO public.chat_logs(user_id, messages) VALUES($1, $2)`,
                 [req.user.id, JSON.stringify(messages)]
             );
         }
@@ -1424,21 +1618,21 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
         );
 
         // Build email body
-        const chatTranscript = (messages || []).map(m => `${m.role.toUpperCase()}: ${m.text}`).join('\n\n');
+        const chatTranscript = (messages || []).map(m => `${ m.role.toUpperCase() }: ${ m.text } `).join('\n\n');
         const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
 
         if (transporter && adminEmail) {
             await transporter.sendMail({
-                from: `LifeScope AI <${process.env.SMTP_EMAIL}>`,
+                from: `LifeScope AI < ${ process.env.SMTP_EMAIL }> `,
                 to: adminEmail,
-                subject: `[LifeScope Support] Escalation from ${userName || 'User'}`,
-                text: `Support escalation from ${userName} (${userEmail})\n\nChat Transcript:\n${chatTranscript}`,
-                html: `<h2>Support Escalation</h2>
+                subject: `[LifeScope Support] Escalation from ${ userName || 'User' } `,
+                text: `Support escalation from ${ userName } (${ userEmail }) \n\nChat Transcript: \n${ chatTranscript } `,
+                html: `< h2 > Support Escalation</h2 >
                        <p><strong>User:</strong> ${userName} (${userEmail})</p>
                        <h3>Chat Transcript</h3>
                        <pre style="background:#f4f4f4;padding:16px;border-radius:8px;">${chatTranscript}</pre>`
             });
-            console.log(`📧 Escalation email sent for user ${userEmail}`);
+            console.log(`📧 Escalation email sent for user ${ userEmail }`);
         } else {
             console.warn('⚠️ Email not configured. Escalation logged but not emailed.');
         }
@@ -1458,8 +1652,8 @@ app.post('/api/health/test-results', ensureAuth, async (req, res) => {
     try {
         const { test_date, test_type, results, ai_interpretation } = req.body;
         const { rows } = await pool.query(
-            `INSERT INTO public.health_test_results (user_id, test_date, test_type, results, ai_interpretation)
-             VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+            `INSERT INTO public.health_test_results(user_id, test_date, test_type, results, ai_interpretation)
+VALUES($1, $2, $3, $4, $5) RETURNING * `,
             [req.user.id, test_date, test_type, JSON.stringify(results), ai_interpretation || null]
         );
         res.json({ data: rows[0] });
@@ -1498,18 +1692,18 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
         }
 
         const adminEmail = process.env.SMTP_EMAIL || 'support@getlifescope.com';
-        const chatHtml = messages.map(m => `<b>${m.role.toUpperCase()}:</b> <p>${m.text}</p>`).join('<hr/>');
+        const chatHtml = messages.map(m => `< b > ${ m.role.toUpperCase() }:</b > <p>${m.text}</p>`).join('<hr/>');
 
-        const html = `<h2>Chat Escalation Alert</h2>
+        const html = `< h2 > Chat Escalation Alert</h2 >
                       <p><b>User:</b> ${userName || 'Unknown'} (${userEmail || 'Unknown'})</p>
                       <h3>Conversation Log:</h3>
                       <div style="background:#f4f4f4;padding:15px;border-radius:5px;font-family:sans-serif;">${chatHtml}</div>`;
 
         if (transporter && process.env.SMTP_EMAIL) {
             await transporter.sendMail({
-                from: `"LifeScope System" <${process.env.SMTP_EMAIL}>`,
+                from: `"LifeScope System" < ${ process.env.SMTP_EMAIL }> `,
                 to: adminEmail,
-                subject: `Support Escalation: ${userName || 'User'}`,
+                subject: `Support Escalation: ${ userName || 'User' } `,
                 html: html
             });
             console.log("✅ Chat Escalation sent via SMTP");
@@ -1517,7 +1711,7 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
             await resend.emails.send({
                 from: 'LifeScope System <support@getlifescope.com>',
                 to: adminEmail,
-                subject: `Support Escalation: ${userName || 'User'}`,
+                subject: `Support Escalation: ${ userName || 'User' } `,
                 html: html
             });
             console.log("✅ Chat Escalation sent via Resend");
@@ -1576,23 +1770,23 @@ const sendMonthlySummaries = async () => {
             );
 
             if (goals.length > 0) {
-                const goalListHtml = goals.map(g => `<li><strong>${g.title}</strong>: ${g.progress} / ${g.target}</li>`).join('');
+                const goalListHtml = goals.map(g => `< li > <strong>${g.title}</strong>: ${ g.progress } / ${g.target}</li > `).join('');
 
                 try {
                     await resend.emails.send({
                         from: 'LifeScope AI <support@getlifescope.com>', // Verified domain
                         to: user.email,
                         subject: 'Your Monthly LifeScope Report',
-                        html: `<h2>Hello ${user.full_name || 'there'}!</h2>
+                        html: `< h2 > Hello ${ user.full_name || 'there' } !</h2 >
                                <p>Here is your monthly check-in from LifeScope AI. You have some active goals waiting for your attention:</p>
                                <ul>${goalListHtml}</ul>
                                <p>Log in to update your progress and keep up the great work!</p>
                                <br/>
                                <p>Best regards,<br/>LifeScope AI</p>`
                     });
-                    console.log(`✅ Monthly email sent to ${user.email}`);
+                    console.log(`✅ Monthly email sent to ${ user.email } `);
                 } catch (emailErr) {
-                    console.error(`❌ Failed to send email to ${user.email}:`, emailErr);
+                    console.error(`❌ Failed to send email to ${ user.email }: `, emailErr);
                 }
             }
         }
@@ -1620,5 +1814,5 @@ app.post('/api/email/trigger-monthly', ensureAuth, ensureAdmin, async (req, res)
 
 
 app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`Server running on port ${ PORT } `);
 });
