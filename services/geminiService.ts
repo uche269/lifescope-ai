@@ -643,7 +643,7 @@ If the user asks you to summarize, extract data, find specific information, or e
 export const generateReport = async (
   prompt: string,
   documentText?: string,
-  format: 'pdf' | 'docx' | 'xlsx' = 'pdf',
+  format: 'pdf' | 'docx' | 'xlsx' | 'pptx' = 'pdf',
   templateText?: string
 ) => {
   try {
@@ -655,10 +655,11 @@ export const generateReport = async (
       contextText = `REFERENCE DOCUMENT:\n---\n${documentText.slice(0, 30000)}\n---\n\n`;
     }
 
-    const formatInstructions = {
-      pdf: 'Provide a comprehensive, continuous essay-style report with clear section headings, bullet points, and paragraphs.',
-      docx: 'Provide a structured document. Use clear Header 1, Header 2 formatting and bulleted lists where appropriate.',
-      xlsx: 'Provide data in a tabular format. Return a CSV-like structure using | (pipe) to separate columns, and new lines for rows. First row should be headers.'
+    const formatInstructions: Record<string, string> = {
+      pdf: 'Provide a comprehensive, exhaustive, multi-page essay-style report (absolute minimum 800 words). Use clear section headings and extensive paragraphs. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output. Return pure, clean text.',
+      docx: 'Provide a structured, exhaustive, multi-page document (absolute minimum 800 words). Use clear headings and expansive paragraphs. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output. Return pure, clean text.',
+      xlsx: 'Provide exhaustive data in a tabular format. Return a CSV-like structure using | (pipe) to separate columns, and new lines for rows. First row should be headers. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output.',
+      pptx: 'Provide a comprehensive, multi-slide presentation (minimum 5 slides). You MUST output EXACTLY in this format for EVERY single slide:\n\n---SLIDE---\nTitle: [Insert slide title here]\nContent: [Insert detailed paragraph content here, at least 3 sentences]\n\nCRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output. Separate each slide with the ---SLIDE--- marker.'
     };
 
     const systemPrompt = `You are a professional report generation AI. 

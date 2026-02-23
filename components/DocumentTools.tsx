@@ -67,7 +67,7 @@ const DocumentTools: React.FC = () => {
 
     // Report State
     const [reportPrompt, setReportPrompt] = useState('');
-    const [reportFormat, setReportFormat] = useState<'pdf' | 'docx' | 'xlsx'>('pdf');
+    const [reportFormat, setReportFormat] = useState<'pdf' | 'docx' | 'xlsx' | 'pptx'>('pdf');
     const [isGeneratingReport, setIsGeneratingReport] = useState(false);
     const [templateFile, setTemplateFile] = useState<File | null>(null);
 
@@ -356,15 +356,26 @@ const DocumentTools: React.FC = () => {
             if (reportFormat === 'pdf') {
                 const { jsPDF } = await import('jspdf');
                 const doc = new jsPDF();
-                const splitText = doc.splitTextToSize(reportContent, 180);
-                doc.text(splitText, 15, 20);
+                const cleanText = reportContent.replace(/[*#_`~]/g, '');
+                const splitText = doc.splitTextToSize(cleanText, 180);
+
+                let y = 20;
+                for (let i = 0; i < splitText.length; i++) {
+                    if (y > 280) {
+                        doc.addPage();
+                        y = 20;
+                    }
+                    doc.text(splitText[i], 15, y);
+                    y += 7;
+                }
                 doc.save('AI_Report.pdf');
             } else if (reportFormat === 'docx') {
                 const { Document, Packer, Paragraph, TextRun } = await import('docx');
+                const cleanText = reportContent.replace(/[*#_`~]/g, '');
                 const doc = new Document({
                     sections: [{
                         properties: {},
-                        children: reportContent.split('\n').map(line => new Paragraph({
+                        children: cleanText.split('\n').map(line => new Paragraph({
                             children: [new TextRun(line)]
                         }))
                     }]
@@ -384,6 +395,31 @@ const DocumentTools: React.FC = () => {
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Report");
                 XLSX.writeFile(wb, "AI_Data.xlsx");
+            } else if (reportFormat === 'pptx') {
+                const PPTXGenJS = (await import('pptxgenjs')).default;
+                const pptx = new PPTXGenJS();
+
+                const slides = reportContent.split('---SLIDE---').filter(s => s.trim().length > 0);
+
+                if (slides.length === 0) {
+                    const slide = pptx.addSlide();
+                    slide.addText('AI Report', { x: 0.5, y: 0.5, fontSize: 24, bold: true });
+                    slide.addText(reportContent.replace(/[*#_`~]/g, '').substring(0, 1000), { x: 0.5, y: 1.5, w: '90%', fontSize: 14 });
+                } else {
+                    for (const slideText of slides) {
+                        const titleMatch = slideText.match(/Title:\s*(.*)/i);
+                        const contentMatch = slideText.match(/Content:([\s\S]*)/i);
+
+                        const title = titleMatch ? titleMatch[1].replace(/[*#_`~]/g, '').trim() : 'Slide';
+                        const content = contentMatch ? contentMatch[1].replace(/[*#_`~]/g, '').trim() : slideText.replace(/[*#_`~]/g, '').trim();
+
+                        const slide = pptx.addSlide();
+                        slide.addText(title, { x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true, color: '363636' });
+                        slide.addText(content, { x: 0.5, y: 1.5, w: '90%', h: '75%', fontSize: 14, color: '666666', valign: 'top' });
+                    }
+                }
+
+                await pptx.writeFile({ fileName: 'AI_Report.pptx' });
             }
 
             setResult('Report generated and downloaded successfully!');
@@ -778,7 +814,7 @@ const DocumentTools: React.FC = () => {
                         <div>
                             <label className="block text-sm font-medium text-slate-300 mb-2">Export Format</label>
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {['pdf', 'docx', 'xlsx'].map(fmt => (
+                                {['pdf', 'docx', 'xlsx', 'pptx'].map(fmt => (
                                     <button
                                         key={fmt}
                                         onClick={() => setReportFormat(fmt as any)}
