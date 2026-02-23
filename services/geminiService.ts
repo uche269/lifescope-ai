@@ -228,7 +228,7 @@ export const analyzeUrl = async (url: string) => {
 export const generateAnnualReport = async (userData: any) => {
   try {
     const ai = getAI();
-    const MODEL_NAME = 'gemini-1.5-pro-latest';
+    const MODEL_NAME = 'gemini-1.5-flash';
 
     const prompt = `
             You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
@@ -461,7 +461,7 @@ Keep responses concise and helpful. Do not use markdown formatting. If you canno
 export const parseHealthReport = async (base64Image: string, mimeType: string = 'image/jpeg') => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-pro-latest';
+    const model = 'gemini-1.5-flash';
 
     const prompt = `
       You are an expert medical data extractor. 
@@ -505,7 +505,7 @@ export const parseHealthReport = async (base64Image: string, mimeType: string = 
 export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-pro-latest';
+    const model = 'gemini-1.5-flash';
 
     const prompt = `
       Interpret these medical test results in plain language:
@@ -552,7 +552,7 @@ export const healthChat = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-pro-latest';
+    const model = 'gemini-1.5-flash';
 
     const contextSummary = [];
     if (healthContext.weightLogs?.length) {
@@ -648,7 +648,7 @@ export const generateReport = async (
 ) => {
   try {
     const ai = getAI();
-    const model = 'gemini-1.5-pro-latest';
+    const model = 'gemini-1.5-flash';
 
     let contextText = '';
     if (documentText) {
