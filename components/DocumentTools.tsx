@@ -352,34 +352,130 @@ const DocumentTools: React.FC = () => {
             // the respective generation library (docx, pptxgenjs, xlsx, jspdf) here.
             // For now, let's output it as the result text, and simulate the download.
 
+            // Prepare shared slide structures for media-enabled formats
+            const slidesRaw = reportContent.split('---SLIDE---').filter(s => s.trim().length > 0);
+            const parsedSlides = slidesRaw.length > 0 ? slidesRaw.map(slideText => {
+                const titleMatch = slideText.match(/Title:\s*(.*)/i);
+                const layoutMatch = slideText.match(/Layout:\s*(.*)/i);
+
+                const title = titleMatch ? titleMatch[1].replace(/[*#_`~]/g, '').trim() : 'Slide';
+                const layout = layoutMatch ? layoutMatch[1].toLowerCase().trim() : 'full';
+                const isSplit = layout.includes('split');
+
+                const chartIndex = slideText.indexOf('---CHART---');
+                let contentRaw = slideText;
+                let chartRaw = '';
+
+                if (chartIndex !== -1) {
+                    contentRaw = slideText.substring(0, chartIndex);
+                    chartRaw = slideText.substring(chartIndex);
+                }
+
+                const contentMatch = contentRaw.match(/Content:([\s\S]*)/i);
+                const content = contentMatch ? contentMatch[1].replace(/[*#_`~]/g, '').trim() : contentRaw.replace(/[*#_`~]/g, '').trim();
+
+                let chartDef: any = null;
+                if (chartRaw.length > 0 && isSplit) {
+                    const typeMatch = chartRaw.match(/Type:\s*(.*)/i);
+                    const labelsMatch = chartRaw.match(/Labels:\s*(.*)/i);
+                    const valuesMatch = chartRaw.match(/Values:\s*(.*)/i);
+                    if (typeMatch && labelsMatch && valuesMatch) {
+                        const labels = labelsMatch[1].split(',').map(l => l.trim().replace(/[*#_`~]/g, ''));
+                        const valuesStr = valuesMatch[1].split(',').map(v => v.trim().replace(/[^0-9.-]/g, ''));
+                        const values = valuesStr.map(v => parseFloat(v) || 0);
+                        const minLen = Math.min(labels.length, values.length);
+                        chartDef = {
+                            type: typeMatch[1].toLowerCase().trim(),
+                            labels: labels.slice(0, minLen),
+                            values: values.slice(0, minLen)
+                        };
+                    }
+                }
+                return { title, isSplit, content, chartDef };
+            }) : [{ title: 'AI Report', isSplit: false, content: reportContent.replace(/[*#_`~]/g, ''), chartDef: null }];
+
             // Generate formats
             if (reportFormat === 'pdf') {
                 const { jsPDF } = await import('jspdf');
                 const doc = new jsPDF();
-                const cleanText = reportContent.replace(/[*#_`~]/g, '');
-                const splitText = doc.splitTextToSize(cleanText, 180);
 
                 let y = 20;
-                for (let i = 0; i < splitText.length; i++) {
-                    if (y > 280) {
-                        doc.addPage();
-                        y = 20;
+                for (const slide of parsedSlides) {
+                    // Check if we need a new page for the slide title
+                    if (y > 270) { doc.addPage(); y = 20; }
+
+                    doc.setFontSize(16);
+                    doc.setFont('helvetica', 'bold');
+                    doc.text(slide.title, 15, y);
+                    y += 10;
+
+                    doc.setFontSize(12);
+                    doc.setFont('helvetica', 'normal');
+                    const splitText = doc.splitTextToSize(slide.content, 180);
+
+                    for (let i = 0; i < splitText.length; i++) {
+                        if (y > 280) { doc.addPage(); y = 20; }
+                        doc.text(splitText[i], 15, y);
+                        y += 7;
                     }
-                    doc.text(splitText[i], 15, y);
-                    y += 7;
+
+                    y += 5;
+
+                    // Render QuickChart Image into PDF
+                    if (slide.chartDef) {
+                        try {
+                            const cType = slide.chartDef.type.includes('pie') ? 'pie' : (slide.chartDef.type.includes('line') ? 'line' : 'bar');
+                            const chartConfig = {
+                                type: cType,
+                                data: { labels: slide.chartDef.labels, datasets: [{ label: 'Data', data: slide.chartDef.values }] }
+                            };
+                            const qs = encodeURIComponent(JSON.stringify(chartConfig));
+                            const imgUrl = `https://quickchart.io/chart?c=${qs}&width=500&height=300`;
+
+                            const imgRes = await fetch(imgUrl);
+                            const imgBlob = await imgRes.blob();
+                            const base64 = await new Promise<string>((resolve) => {
+                                const reader = new FileReader();
+                                reader.onload = () => resolve(reader.result as string);
+                                reader.readAsDataURL(imgBlob);
+                            });
+
+                            // Check available space for a chart (approx 80 chars height)
+                            if (y > 200) { doc.addPage(); y = 20; }
+
+                            doc.addImage(base64, 'PNG', 15, y, 160, 96);
+                            y += 105;
+                        } catch (e) {
+                            console.error("Failed to fetch PDF chart image", e);
+                        }
+                    }
                 }
+
                 doc.save('AI_Report.pdf');
             } else if (reportFormat === 'docx') {
-                const { Document, Packer, Paragraph, TextRun } = await import('docx');
-                const cleanText = reportContent.replace(/[*#_`~]/g, '');
-                const doc = new Document({
-                    sections: [{
-                        properties: {},
-                        children: cleanText.split('\n').map(line => new Paragraph({
+                const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
+                const childrenElements: any[] = [];
+
+                for (const slide of parsedSlides) {
+                    childrenElements.push(new Paragraph({
+                        text: slide.title,
+                        heading: HeadingLevel.HEADING_1,
+                    }));
+
+                    slide.content.split('\n').forEach(line => {
+                        childrenElements.push(new Paragraph({
                             children: [new TextRun(line)]
-                        }))
-                    }]
-                });
+                        }));
+                    });
+
+                    if (slide.chartDef) {
+                        childrenElements.push(new Paragraph({
+                            children: [new TextRun({ text: `[Chart Data Reference: ${slide.chartDef.labels.join(', ')} -> ${slide.chartDef.values.join(', ')}]`, italics: true })]
+                        }));
+                    }
+                }
+
+                const doc = new Document({ sections: [{ properties: {}, children: childrenElements }] });
                 const blob = await Packer.toBlob(doc);
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
@@ -389,33 +485,30 @@ const DocumentTools: React.FC = () => {
                 URL.revokeObjectURL(url);
             } else if (reportFormat === 'xlsx') {
                 const XLSX = await import('xlsx');
-                // Extremely basic CSV parse
-                const rows = reportContent.split('\n').map(r => r.split('|').map(c => c.trim()));
+                // Extremely basic CSV parse for generic reports
+                const rows = reportContent.split('\n').map(r => r.split('|').map(c => c.trim().replace(/[*#_`~]/g, '')));
                 const ws = XLSX.utils.aoa_to_sheet(rows);
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, "Report");
-                XLSX.writeFile(wb, "AI_Data.xlsx");
+                XLSX.writeFile(wb, "AI_Report.xlsx");
             } else if (reportFormat === 'pptx') {
                 const PPTXGenJS = (await import('pptxgenjs')).default;
                 const pptx = new PPTXGenJS();
 
-                const slides = reportContent.split('---SLIDE---').filter(s => s.trim().length > 0);
+                for (const slide of parsedSlides) {
+                    const pptxSlide = pptx.addSlide();
+                    pptxSlide.addText(slide.title, { x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true, color: '363636' });
 
-                if (slides.length === 0) {
-                    const slide = pptx.addSlide();
-                    slide.addText('AI Report', { x: 0.5, y: 0.5, fontSize: 24, bold: true });
-                    slide.addText(reportContent.replace(/[*#_`~]/g, '').substring(0, 1000), { x: 0.5, y: 1.5, w: '90%', fontSize: 14 });
-                } else {
-                    for (const slideText of slides) {
-                        const titleMatch = slideText.match(/Title:\s*(.*)/i);
-                        const contentMatch = slideText.match(/Content:([\s\S]*)/i);
+                    const textWidth = slide.isSplit && slide.chartDef ? '45%' : '90%';
+                    pptxSlide.addText(slide.content, { x: 0.5, y: 1.5, w: textWidth, h: '75%', fontSize: 14, color: '666666', valign: 'top' });
 
-                        const title = titleMatch ? titleMatch[1].replace(/[*#_`~]/g, '').trim() : 'Slide';
-                        const content = contentMatch ? contentMatch[1].replace(/[*#_`~]/g, '').trim() : slideText.replace(/[*#_`~]/g, '').trim();
+                    if (slide.chartDef && slide.isSplit) {
+                        const chartData = [{ name: "Data", labels: slide.chartDef.labels, values: slide.chartDef.values }];
+                        let pptxChartType = pptx.ChartType.bar;
+                        if (slide.chartDef.type.includes('line')) pptxChartType = pptx.ChartType.line;
+                        if (slide.chartDef.type.includes('pie')) pptxChartType = pptx.ChartType.pie;
 
-                        const slide = pptx.addSlide();
-                        slide.addText(title, { x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true, color: '363636' });
-                        slide.addText(content, { x: 0.5, y: 1.5, w: '90%', h: '75%', fontSize: 14, color: '666666', valign: 'top' });
+                        pptxSlide.addChart(pptxChartType, chartData, { x: 5.5, y: 1.5, w: 4.0, h: 3.5 });
                     }
                 }
 
