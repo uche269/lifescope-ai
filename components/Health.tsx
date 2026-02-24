@@ -36,11 +36,11 @@ const Health: React.FC = () => {
 
     // Health Disclaimer
     const [showDisclaimer, setShowDisclaimer] = useState(() => {
-        return !localStorage.getItem('ls_health_disclaimer_accepted');
+        return !localStorage.getItem(`ls_health_disclaimer_accepted_${user?.id || 'guest'}`);
     });
 
     const acceptDisclaimer = () => {
-        localStorage.setItem('ls_health_disclaimer_accepted', 'true');
+        localStorage.setItem(`ls_health_disclaimer_accepted_${user?.id || 'guest'}`, 'true');
         setShowDisclaimer(false);
     };
 
@@ -66,7 +66,7 @@ const Health: React.FC = () => {
 
     // --- Meal Plan State ---
     const [mealPlan, setMealPlan] = useState<string>(() => {
-        return localStorage.getItem('ls_meal_plan') || '';
+        return localStorage.getItem(`ls_meal_plan_${user?.id || 'guest'}`) || '';
     });
     const [isGeneratingPlan, setIsGeneratingPlan] = useState(false);
     const [isImprovingPlan, setIsImprovingPlan] = useState(false);
@@ -109,6 +109,7 @@ const Health: React.FC = () => {
             if (Array.isArray(fData)) setFoodLogs(fData);
         } catch (error) {
             console.error('Health data fetch error:', error);
+        } finally {
             setLoading(false);
         }
     };
@@ -122,7 +123,7 @@ const Health: React.FC = () => {
     }, []);
 
     // Save meal plan locally still as it's a draft usually
-    useEffect(() => localStorage.setItem('ls_meal_plan', mealPlan), [mealPlan]);
+    useEffect(() => localStorage.setItem(`ls_meal_plan_${user?.id || 'guest'}`, mealPlan), [mealPlan, user]);
 
     // --- Handlers: Metrics ---
     const addWeightLog = async () => {

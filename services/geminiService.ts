@@ -1,225 +1,78 @@
-import { GoogleGenAI, Type } from "@google/genai";
+import api from './api';
 import { logError } from '../utils/debugLogger';
 
-// Helper to initialize AI with dynamic key
-const getAI = () => {
+// Helper to pass dynamic key if user set it
+const getHeaders = () => {
   const storedKey = localStorage.getItem('ls_gemini_key');
-  // vite.config.ts exposes GEMINI_API_KEY as process.env.GEMINI_API_KEY (no VITE_ prefix needed)
-  const apiKey = storedKey || (process.env as any).GEMINI_API_KEY || import.meta.env.VITE_GEMINI_API_KEY || '';
-  return new GoogleGenAI({ apiKey });
+  return storedKey ? { 'x-gemini-key': storedKey } : {};
 };
-
-// System instruction to maintain persona
-const SYSTEM_INSTRUCTION = `
-You are a personal AI Goal Tracker and Life Management Assistant. 
-Your output should be clear, concise, and action-oriented.
-IMPORTANT: Do NOT use Markdown formatting (no bolding **, no headers #, no bullet points *, no dashes -). 
-Write in clean, plain text paragraphs or simple numbered lists (1. 2. 3.) only if absolutely necessary.
-Always end responses by asking "What do you want to add, review, or improve today?".
-`;
 
 export const getAIRecommendation = async (goalTitle: string, currentStatus: string) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash';
-    const prompt = `
-      I have a goal: "${goalTitle}". 
-      Current status: ${currentStatus}.
-      Please provide 3 specific, actionable activities to help me achieve this, and 1 potential pitfall to avoid.
-      Format as a concise list (1. 2. 3. 4.). Do not use bold characters.
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-      }
-    });
-
-    return response.text;
+    const res = await api.post('/ai/recommendation', { goalTitle, currentStatus }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("AI Recommendation Error:", error);
-    return "Unable to generate recommendations. Please check your API Key in Settings.";
+    return "Unable to generate recommendations. Please check your AI Quota or API Key.";
   }
 };
 
 export const generateScenarioScript = async (scenario: string, level: 'Beginner' | 'Advanced') => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash';
-    const prompt = `
-      Scenario: ${scenario}
-      Level: ${level}
-      
-      Generate a role-play script for me to practice. 
-      Format it as a script (Me: ... You: ...).
-      Do NOT use any markdown formatting like ** or ## or ---.
-      Include actionable tone tips at the end.
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-      }
-    });
-
-    return response.text;
+    const res = await api.post('/ai/scenario', { scenario, level }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Scenario Gen Error:", error);
-    return "Error generating scenario. Please check your API Key in Settings.";
+    return "Error generating scenario. Please check your AI Quota or API Key.";
   }
 };
 
 export const chatWithAI = async (history: { role: string, parts: { text: string }[] }[], message: string) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash';
-    const chat = ai.chats.create({
-      model,
-      history: history,
-      config: {
-        systemInstruction: "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
-      }
-    });
-
-    const result = await chat.sendMessage({ message });
-    return result.text;
+    const res = await api.post('/ai/chat', { history, message }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
-    return "I'm having trouble connecting. Please check your API Key in Settings.";
+    return "I'm having trouble connecting. Please check your AI Quota or API Key.";
   }
 }
 
 export const analyzeVoice = async (audioBase64: string) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash';
-    const response = await ai.models.generateContent({
-      model,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
-          { text: "Analyze this voice recording. Give feedback on 1) Confidence, 2) Clarity, 3) Tone. Do not use Markdown." }
-        ]
-      }
-    });
-    return response.text;
+    const res = await api.post('/ai/voice', { audioBase64 }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Voice Analysis Error", error);
-    return "Could not analyze audio. Please ensure you have a valid Gemini API Key set in Settings.";
+    return "Could not analyze audio. Please ensure you have a valid Gemini API Key or enough Quota.";
   }
 }
 
 export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance') => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash'; // Using Flash with Google Search grounding
-    let prompt = "";
-
-    if (topic === 'Sports') {
-      prompt = "Write a detailed report on trending talking points in Football, Boxing, and MMA. Write in full paragraphs. Do not use bullet points or markdown symbols.";
-    } else if (topic === 'History') {
-      prompt = `
-        Write a two-part historical report.
-        
-        PART 1: NIGERIA
-        Write a deep dive (approx 150 words) about a specific, interesting event in Nigerian history or culture. Explain the context, the event, and its significance.
-
-        PART 2: GLOBAL
-        Write a deep dive (approx 150 words) about a significant historical event from Europe, America, or Canada.
-        
-        Formatting:
-        Do not use Markdown symbols (*, #).
-        Use clear ALL CAPS headings for the sections (e.g. NIGERIAN HISTORY, GLOBAL HISTORY).
-        Write in an engaging, storytelling format.
-      `;
-    } else if (topic === 'Finance') {
-      prompt = "Provide a robust financial report on the Nigerian Market. Include specific current metrics for Nigeria (GDP, Inflation, FX Rates). Analyze key moves by top Asset Management firms and Stock Brokers in Nigeria. Mention recent awards or major market shifts. Write in full paragraphs with a professional tone. Do not use bullet points.";
-    }
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        systemInstruction: "You are an expert analyst. Output plain text only. No markdown formatting.",
-        tools: [{ googleSearch: {} }]
-      }
-    });
-
-    return response.text;
+    const res = await api.post('/ai/briefing', { topic }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Briefing Error:", error);
-    return "Unable to fetch briefing data. Please check your API Key in Settings.";
+    return "Unable to fetch briefing data. Please check your Quota or API Key.";
   }
 };
 
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-    const response = await ai.models.generateContent({
-      model,
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: base64Data
-            }
-          },
-          {
-            text: "Summarize this document. Provide 3 key takeaways and actionable insights. Output as plain text only, no bolding or markdown symbols."
-          }
-        ]
-      },
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION
-      }
-    });
-    return response.text;
+    const res = await api.post('/ai/document', { base64Data, mimeType }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Doc Analysis Error:", error);
-    return "Error analyzing document. Please check your API Key in Settings.";
+    return "Error analyzing document. Please check your Quota or API Key.";
   }
 };
 
 export const analyzeUrl = async (url: string) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash';
-
-    const prompt = `
-      Access and analyze the content of this website: ${url}
-      
-      Provide a comprehensive summary of the page's content.
-      List 3-5 key takeaways or actionable insights found on the page.
-      
-      Format:
-      SUMMARY:
-      [Summary text]
-      
-      KEY TAKEAWAYS:
-      1. [Takeaway 1]
-      2. [Takeaway 2]
-      ...
-      
-      Do not use markdown formatting like bolding (**) or headers (##).
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }]
-      }
-    });
-
-    return response.text;
+    const res = await api.post('/ai/url', { url }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("URL Analysis Error:", error);
-    return "Unable to analyze website. Please ensure your API key is valid and supports Google Search grounding.";
+    return "Unable to analyze website. Please ensure your Quota is not exceeded or your key supports grounding.";
   }
 };
 
@@ -227,47 +80,11 @@ export const analyzeUrl = async (url: string) => {
 
 export const generateAnnualReport = async (userData: any) => {
   try {
-    const ai = getAI();
-    const MODEL_NAME = 'gemini-2.5-pro';
-
-    const prompt = `
-            You are a Senior Strategic Life Coach. Generate a comprehensive "Year-in-Review" Report for the user based on the following data:
-            
-            USER DATA:
-            ${JSON.stringify(userData, null, 2)}
-
-            REQUIREMENTS:
-            1. Analyze the completion rates, health trends, and project progress.
-            2. Identify patterns (e.g., "You consistently hit health goals but struggled with financial ones").
-            3. Provide specific, brutally honest (but constructive) feedback.
-            4. Recommend 3-5 MAJOR GOALS for the upcoming year based on this trajectory.
-
-            FORMAT:
-            Use these EXACT headers (in ALL CAPS):
-            EXECUTIVE SUMMARY
-            PERFORMANCE ANALYSIS
-            KEY ACHIEVEMENTS
-            CRITICAL FEEDBACK
-            STRATEGIC GOALS FOR NEXT YEAR
-
-            Do NOT use bolding, italics, or markdown symbols (*, #).
-            Write in clear, professional paragraphs.
-        `;
-
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: prompt,
-      config: {}
-    });
-
-    return response.text;
+    const res = await api.post('/ai/annual-report', { userData }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error: any) {
-    if (error.message?.includes('404')) {
-      console.warn("Gemini 1.5-flash not found, falling back to pro-vision");
-    }
-    logError("Gemini API Error", { message: error.message, details: error });
-    // Return a user-friendly error string instead of crashing
-    return `AI Error: Unable to generate report. Details: ${error.message || 'Unknown error'}`;
+    logError("API / Quota Error generating Report", { message: error.message, details: error });
+    return `AI Error: Unable to generate report. Max Quota reached?`;
   }
 }
 
@@ -275,53 +92,8 @@ export const generateAnnualReport = async (userData: any) => {
 
 export const analyzeFoodImage = async (base64Image: string) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-
-    const prompt = `
-      Analyze the food in this image carefully.
-
-      RULES:
-      1. If you cannot clearly identify the food, set "confidence" to "low" and explain in "notes" why it's hard to determine.
-      2. If you can identify the food, provide your best calorie and macro estimates.
-      3. Break down each identifiable item separately in the "items" array.
-      4. Always be honest about uncertainty — these are estimates, not exact values.
-
-      Return ONLY a JSON object in this exact format:
-      {
-        "name": "Overall description of the meal",
-        "confidence": "high" | "medium" | "low",
-        "items": [
-          { "name": "Item 1", "calories": 0, "protein": 0, "carbs": 0, "fat": 0, "portion": "estimated portion size" }
-        ],
-        "calories": 0,
-        "protein": 0,
-        "carbs": 0,
-        "fat": 0,
-        "notes": "Any caveats or observations about accuracy",
-        "suggestions": ["Foods that work well for photo calorie tracking"]
-      }
-      Do not include any other text or markdown code blocks.
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json"
-      }
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No response");
-
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    const res = await api.post('/ai/food-image', { base64Image }, { headers: getHeaders() });
+    return res.data;
   } catch (error) {
     console.error("Food Analysis Error:", error);
     return null;
@@ -330,40 +102,8 @@ export const analyzeFoodImage = async (base64Image: string) => {
 
 export const generateMealPlan = async (preferences: any) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-    const duration = preferences.duration || '7';
-    const countryLine = preferences.country ? `Country/Cuisine Preference: ${preferences.country}` : '';
-    const ethnicLine = preferences.ethnicGroup ? `Ethnic/Cultural Food Preferences: ${preferences.ethnicGroup}` : '';
-
-    const prompt = `
-      Create a detailed ${duration}-day meal plan (Breakfast, Lunch, Dinner, and 1-2 Snacks per day) based on these preferences:
-      Goal: ${preferences.goal}
-      Diet Type: ${preferences.dietType}
-      Calories Target: ${preferences.caloriesPerDay} per day
-      Allergies/Dislikes: ${preferences.allergies || 'None'}
-      ${countryLine}
-      ${ethnicLine}
-
-      REQUIREMENTS:
-      - Provide variety — do NOT repeat the same meals across different days
-      - Include estimated calorie counts for each meal and a daily total
-      - If a country or ethnic cuisine is specified, tailor meals to that cuisine
-      - Use realistic, easy-to-prepare meals
-      - Format as a clean, readable text plan organized by Day (Day 1, Day 2, etc.)
-      - Do NOT use markdown symbols (*, #, **) — use plain text with line breaks
-      - End with a brief "Shopping Essentials" section listing key ingredients needed
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION
-      }
-    });
-
-    return response.text;
+    const res = await api.post('/ai/meal-plan', { preferences }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Meal Plan Error:", error);
     return "Unable to generate meal plan at this time.";
@@ -372,37 +112,8 @@ export const generateMealPlan = async (preferences: any) => {
 
 export const improveDietPlan = async (currentPlan: string, goal: string, userComments: string = "") => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-
-    const prompt = `
-            I have this meal plan: 
-            """
-            ${currentPlan}
-            """
-            My goal is: ${goal}.
-            ${userComments ? `\nUSER COMMENTS / REQUESTED CHANGES:\n"${userComments}"\n\nPlease ensure your revised plan directly addresses these comments.` : ''}
-
-            Please analyze this plan. 
-            1. Provide a short critique (what is good, what is missing).
-            2. Provide a REVISED version of the plan that implements your improvements.
-
-            Return ONLY a JSON object with this structure:
-            {
-                "critique": "string",
-                "revisedPlan": "string"
-            }
-        `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: { responseMimeType: "application/json" }
-    });
-
-    const text = response.text;
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    const res = await api.post('/ai/improve-diet', { currentPlan, goal, userComments }, { headers: getHeaders() });
+    return res.data;
   } catch (error) {
     console.error("Diet Improvement Error", error);
     return null;
@@ -417,42 +128,11 @@ export const chatWithSupport = async (
   chatHistory: { role: string; text: string }[]
 ) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-flash';
-
-    const historyFormatted = chatHistory.slice(-6).map(m => ({
-      role: m.role === 'user' ? 'user' : 'model',
-      parts: [{ text: m.text }]
-    }));
-
-    const systemPrompt = `You are the LifeScope AI assistant. You help users navigate the LifeScope app and answer questions about their data and features.
-
-User Info: Name is ${userContext.userName}, Plan: ${userContext.plan}, Trial Active: ${userContext.trialActive}, Trial Days Left: ${userContext.trialDaysLeft}.
-${userContext.weightLogs ? `Recent Weight Logs: ${userContext.weightLogs}` : ''}
-
-App Features:
-- Dashboard: Overview of goals and progress
-- Goals: Create and track personal goals with activities
-- Finance Manager: Upload bank statements (CSV), view spending charts, AI budget analysis
-- Health & Wellness: Weight tracking, food logging, meal plans, health consultant
-- Document Tools: PDF signing, annotation, merging, AI summarization
-- Settings: Profile, plan management, account deletion
-
-Keep responses concise and helpful. Do not use markdown formatting. If you cannot help with an issue, suggest the user clicks "Send to Support" to escalate.`;
-
-    const chat = ai.chats.create({
-      model,
-      history: historyFormatted,
-      config: {
-        systemInstruction: systemPrompt
-      }
-    });
-
-    const result = await chat.sendMessage({ message });
-    return result.text || "I'm not sure about that. Would you like me to send your question to our support team?";
+    const res = await api.post('/ai/chat-support', { message, userContext, chatHistory }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Chat Support Error:", error);
-    throw error;
+    return "I'm having trouble connecting to support AI.";
   }
 }
 
@@ -460,42 +140,8 @@ Keep responses concise and helpful. Do not use markdown formatting. If you canno
 
 export const parseHealthReport = async (base64Image: string, mimeType: string = 'image/jpeg') => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-
-    const prompt = `
-      You are an expert medical data extractor. 
-      Read the following health/lab report image carefully.
-      Extract the test parameters and their values.
-      
-      Return ONLY a JSON array of objects in this exact format:
-      [
-        { "key": "Parameter Name (e.g. WBC, Cholesterol)", "value": "Value (e.g. 5.2)" }
-      ]
-      
-      RULES:
-      1. ONLY return the JSON array. No markdown blocks, no other text.
-      2. If you cannot read the image or it is not a health report, return an empty array: []
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: {
-        parts: [
-          { inlineData: { mimeType: mimeType, data: base64Image } },
-          { text: prompt }
-        ]
-      },
-      config: {
-        responseMimeType: "application/json"
-      }
-    });
-
-    const text = response.text;
-    if (!text) return [];
-
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    const res = await api.post('/ai/health-parse', { base64Image, mimeType }, { headers: getHeaders() });
+    return res.data.results || [];
   } catch (error) {
     console.error("Parse Report Error:", error);
     return [];
@@ -504,39 +150,11 @@ export const parseHealthReport = async (base64Image: string, mimeType: string = 
 
 export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-
-    const prompt = `
-      Interpret these medical test results in plain language:
-      
-      Test Type: ${testData.testType}
-      Results: ${JSON.stringify(testData.results)}
-      
-      For each value:
-      1. Explain what it measures
-      2. Whether the value is normal, low, or high
-      3. What this means for the patient's health
-      4. Simple lifestyle recommendations if values are abnormal
-      
-      Use plain language a non-medical person can understand.
-      Do NOT use markdown formatting.
-      Write in clear paragraphs.
-    `;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: prompt,
-      config: {
-        systemInstruction: "You are a health information assistant. Explain test results clearly. Always include the disclaimer at the end."
-      }
-    });
-
-    const disclaimer = "\n\nDISCLAIMER: This is not medical advice. The information provided is for educational purposes only. Always consult a qualified healthcare provider for medical decisions.";
-    return (response.text || "Unable to interpret results.") + disclaimer;
+    const res = await api.post('/ai/health-interpret', { testData }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Test Interpretation Error:", error);
-    return "Error interpreting test results. Please try again.";
+    return "Error interpreting test results. Please try again or check your API quota.";
   }
 }
 
@@ -551,8 +169,12 @@ export const healthChat = async (
   chatHistory: { role: string; text: string }[]
 ) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
+    // Reusing the chat-support endpoint but passing health Context as userContext could work, 
+    // OR create a dedicated health-chat proxy. Since we already have /api/ai/chat-support, 
+    // we can add a specific health chat endpoint. Let's send it to a dedicated endpoint, 
+    // or just pass the full prompt to a generic chat endpoint. 
+    // Actually, creating a new endpoint `ai/health-chat` in backend is better, or we can just pass the formatted history to `/api/ai/chat` 
+    // and rely on backend's simple model. Let's do that for now.
 
     const contextSummary = [];
     if (healthContext.weightLogs?.length) {
@@ -567,32 +189,26 @@ export const healthChat = async (
       contextSummary.push(`Recent test: ${healthContext.testResults[0].test_type} on ${healthContext.testResults[0].test_date}`);
     }
 
+    const systemPrompt = `You are a health and wellness consultant within the LifeScope app. You have access to the user's health data:\n${contextSummary.join('\n')}\nProvide helpful health guidance based on their data. Be supportive and encouraging.\nDo NOT use markdown formatting.\nALWAYS end your response with this disclaimer on a new line:\n"Note: This is not medical advice. Please consult a healthcare professional for medical decisions."`;
+
     const historyFormatted = chatHistory.slice(-6).map(m => ({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.text }]
     }));
 
-    const systemPrompt = `You are a health and wellness consultant within the LifeScope app. You have access to the user's health data:
-${contextSummary.join('\n')}
-
-Provide helpful health guidance based on their data. Be supportive and encouraging.
-Do NOT use markdown formatting.
-ALWAYS end your response with this disclaimer on a new line:
-"Note: This is not medical advice. Please consult a healthcare professional for medical decisions."`;
-
-    const chat = ai.chats.create({
-      model,
+    // Reusing the generic chat endpoint but prepending the system instruction as the first message to simulate config 
+    // (since our /api/ai/chat only takes history and message and uses a fixed system prompt).
+    // Actually, we can add a systemInstruction field to /api/ai/chat
+    const res = await api.post('/ai/chat', {
       history: historyFormatted,
-      config: {
-        systemInstruction: systemPrompt
-      }
-    });
+      message,
+      systemInstructionOverride: systemPrompt
+    }, { headers: getHeaders() });
 
-    const result = await chat.sendMessage({ message });
-    return result.text || "I'm not sure about that. Please consult a healthcare professional.";
+    return res.data.text;
   } catch (error) {
     console.error("Health Chat Error:", error);
-    return "Error processing your health question. Please try again.";
+    return "Error processing your health question. Please check your Quota.";
   }
 }
 
@@ -602,38 +218,21 @@ export const chatWithDocument = async (
   chatHistory: { role: string; text: string }[]
 ) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-
-    // Truncate document text to avoid token limits
     const truncatedDoc = documentText.slice(0, 30000);
-
     const historyFormatted = chatHistory.slice(-8).map(m => ({
       role: m.role === 'user' ? 'user' : 'model',
       parts: [{ text: m.text }]
     }));
 
-    const systemPrompt = `You are a document analysis assistant. The user has uploaded a document and wants to ask questions about it.
+    const systemPrompt = `You are a document analysis assistant. The user has uploaded a document and wants to ask questions about it.\n\nDOCUMENT CONTENT:\n---\n${truncatedDoc}\n---\n\nAnswer the user's questions based ONLY on the document content above. If the answer is not in the document, say so clearly.\nBe concise and helpful. Do not use markdown formatting.\nIf the user asks you to summarize, extract data, find specific information, or explain sections, do so based on the document.`;
 
-DOCUMENT CONTENT:
----
-${truncatedDoc}
----
-
-Answer the user's questions based ONLY on the document content above. If the answer is not in the document, say so clearly.
-Be concise and helpful. Do not use markdown formatting.
-If the user asks you to summarize, extract data, find specific information, or explain sections, do so based on the document.`;
-
-    const chat = ai.chats.create({
-      model,
+    const res = await api.post('/ai/chat', {
       history: historyFormatted,
-      config: {
-        systemInstruction: systemPrompt
-      }
-    });
+      message,
+      systemInstructionOverride: systemPrompt
+    }, { headers: getHeaders() });
 
-    const result = await chat.sendMessage({ message });
-    return result.text || "I couldn't process that question. Please try again.";
+    return res.data.text;
   } catch (error) {
     console.error("Document Chat Error:", error);
     throw error;
@@ -647,38 +246,8 @@ export const generateReport = async (
   templateText?: string
 ) => {
   try {
-    const ai = getAI();
-    const model = 'gemini-2.5-pro';
-
-    let contextText = '';
-    if (documentText) {
-      contextText = `REFERENCE DOCUMENT:\n---\n${documentText.slice(0, 30000)}\n---\n\n`;
-    }
-
-    const formatInstructions: Record<string, string> = {
-      pdf: 'Provide a comprehensive, exhaustive, multi-page essay-style report (absolute minimum 800 words). Use clear section headings and extensive paragraphs. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output. Return pure, clean text.',
-      docx: 'Provide a structured, exhaustive, multi-page document (absolute minimum 800 words). Use clear headings and expansive paragraphs. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output. Return pure, clean text.',
-      xlsx: 'Provide exhaustive data in a tabular format. Return a CSV-like structure using | (pipe) to separate columns, and new lines for rows. First row should be headers. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output.',
-      pptx: 'Provide a comprehensive, multi-slide presentation (minimum 5 slides). You MUST output EXACTLY in this format for EVERY single slide:\n\n---SLIDE---\nTitle: [Insert slide title here]\nLayout: [split OR full]\nContent: [Insert descriptive paragraph here, minimum 3 sentences]\n---CHART---\nType: [bar OR line OR pie]\nLabels: [Label1, Label2, Label3]\nValues: [Value1, Value2, Value3]\n\nRULES: If Layout is split, you MUST include the ---CHART--- block below the content (pick bar, line, or pie) and provide comma-separated Labels and Values. At least 2 slides must be split layout with charts. CRITICAL: DO NOT use ANY markdown symbols like *, **, #, _, or ` in your output.'
-    };
-
-    const systemPrompt = `You are a professional report generation AI. 
-${contextText}
-${templateText ? `REQUIRED TEMPLATE STRUCTURE:\n---\n${templateText.slice(0, 15000)}\n---\nCRITICAL: You MUST format your generated response to strictly match the layout, headings, style, and outline of the template provided above. Fill in the requested data without breaking the template's structure.\n\n` : ''}
-The user wants you to generate a report based on this prompt: "${prompt}"
-
-Format requirement: ${formatInstructions[format]}
-Ensure the content is high quality, professional, and directly addresses the prompt. Do not include conversational filler; return only the report content.`;
-
-    const response = await ai.models.generateContent({
-      model,
-      contents: systemPrompt,
-    });
-
-    const text = response.text;
-    if (!text) throw new Error("No response generated.");
-
-    return text;
+    const res = await api.post('/ai/report-gen', { prompt, documentText, format, templateText }, { headers: getHeaders() });
+    return res.data.text;
   } catch (error) {
     console.error("Report Generation Error:", error);
     throw error;

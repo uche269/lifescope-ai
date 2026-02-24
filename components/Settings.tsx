@@ -29,6 +29,7 @@ const Settings: React.FC = () => {
     const [deleteInput, setDeleteInput] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [saved, setSaved] = useState(false);
+    const [upgradeLoading, setUpgradeLoading] = useState(false);
 
     useEffect(() => {
         const savedNotifs = localStorage.getItem('ls_notifications');
@@ -81,6 +82,25 @@ const Settings: React.FC = () => {
         } catch (e: any) {
             alert("Delete failed: " + e.message);
             setDeleteLoading(false);
+        }
+    };
+
+    const handleUpgrade = async () => {
+        setUpgradeLoading(true);
+        try {
+            // Amount is in Naira. Adjust based on your pricing. 
+            // 5000 Naira for Premium as an example.
+            const res = await api.post('/payment/initialize', { planId: 'premium', amount: 5000 });
+            if (res.data.checkoutUrl) {
+                window.location.href = res.data.checkoutUrl; // Redirect to Paystack
+            } else {
+                alert("Failed to initiate payment checkout.");
+            }
+        } catch (e: any) {
+            console.error(e);
+            alert("Checkout Error: " + (e.response?.data?.error || e.message));
+        } finally {
+            setUpgradeLoading(false);
         }
     };
 
@@ -185,8 +205,13 @@ const Settings: React.FC = () => {
                                         <p className="text-xs text-slate-400 leading-relaxed mb-3">
                                             Unlock an unlimited context window and access to our most advanced reasoning model (Gemini 2.0 Pro) for deeper financial insights and complex health analyses.
                                         </p>
-                                        <button className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-500/20">
-                                            View Premium Plans
+                                        <button
+                                            onClick={handleUpgrade}
+                                            disabled={upgradeLoading}
+                                            className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-500/20 flex items-center gap-2"
+                                        >
+                                            {upgradeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                                            {upgradeLoading ? 'Processing...' : 'Upgrade Now (₦5,000)'}
                                         </button>
                                     </div>
                                 </div>
@@ -383,31 +408,6 @@ const Settings: React.FC = () => {
                                     </div>
                                 </div>
 
-                                {/* Test Email Integration */}
-                                <div className="bg-slate-900 rounded-xl p-5">
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm font-medium text-white flex items-center gap-2">
-                                                <Mail className="w-4 h-4 text-slate-400" />
-                                                Test Email Integration
-                                            </p>
-                                            <p className="text-xs text-slate-500 mt-1 max-w-sm">
-                                                Send a test email to yourself to verify that the Resend or SMTP configuration is working correctly on your server.
-                                            </p>
-                                        </div>
-                                        <div className="flex items-center gap-3">
-                                            {testEmailSuccess === true && <span className="text-xs text-emerald-400 font-medium">Email Sent!</span>}
-                                            {testEmailSuccess === false && <span className="text-xs text-red-400 font-medium">Failed</span>}
-                                            <button
-                                                onClick={handleTestEmail}
-                                                disabled={testEmailLoading}
-                                                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 flex items-center gap-2"
-                                            >
-                                                {testEmailLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Send Test'}
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
 
                                 {/* Legacy Migration */}
                                 <div className="bg-slate-900 rounded-xl p-5 border border-indigo-500/30">

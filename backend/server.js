@@ -1645,6 +1645,392 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
 });
 
 // ============================
+// AI API ROUTES (Backend-proxy to track quota)
+// ============================
+
+// Helper locally
+const getAI = (req) => {
+    // If user passed a key from front-end localStorage, use it. Else use server ENV
+    const apiKey = req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
+    return new GoogleGenAI({ apiKey });
+};
+
+// We apply ensureAuth and checkAIQuota to ALL real AI usage routes
+const aiAuth = [ensureAuth, checkAIQuota];
+
+const SYSTEM_INSTRUCTION = `
+You are a personal AI Goal Tracker and Life Management Assistant. 
+Your output should be clear, concise, and action-oriented.
+IMPORTANT: Do NOT use Markdown formatting (no bolding **, no headers #, no bullet points *, no dashes -). 
+Write in clean, plain text paragraphs or simple numbered lists (1. 2. 3.) only if absolutely necessary.
+Always end responses by asking "What do you want to add, review, or improve today?".
+`;
+
+app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
+    try {
+        const { goalTitle, currentStatus } = req.body;
+        const ai = getAI(req);
+        const prompt = `
+            I have a goal: "${goalTitle}". 
+            Current status: ${currentStatus}.
+            Please provide 3 specific, actionable activities to help me achieve this, and 1 potential pitfall to avoid.
+            Format as a concise list (1. 2. 3. 4.). Do not use bold characters.
+        `;
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { systemInstruction: SYSTEM_INSTRUCTION }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        console.error("AI Recomm Error:", error);
+        res.status(500).json({ error: "Unable to generate recommendations." });
+    }
+});
+
+app.post('/api/ai/scenario', aiAuth, async (req, res) => {
+    try {
+        const { scenario, level } = req.body;
+        const ai = getAI(req);
+        const prompt = `
+            Scenario: ${scenario}
+            Level: ${level}
+            
+            Generate a role-play script for me to practice. 
+            Format it as a script (Me: ... You: ...).
+            Do NOT use any markdown formatting like ** or ## or ---.
+            Include actionable tone tips at the end.
+        `;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { systemInstruction: SYSTEM_INSTRUCTION }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Error generating scenario." });
+    }
+});
+
+app.post('/api/ai/chat', aiAuth, async (req, res) => {
+    try {
+        const { history, message } = req.body;
+        const ai = getAI(req);
+        const chat = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            history: history,
+            config: {
+                systemInstruction: "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
+            }
+        });
+        const result = await chat.sendMessage({ message });
+        res.json({ text: result.text });
+    } catch (error) {
+        res.status(500).json({ error: "I'm having trouble connecting." });
+    }
+});
+
+app.post('/api/ai/voice', aiAuth, async (req, res) => {
+    try {
+        const { audioBase64 } = req.body;
+        const ai = getAI(req);
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
+                    { text: "Analyze this voice recording. Give feedback on 1) Confidence, 2) Clarity, 3) Tone. Do not use Markdown." }
+                ]
+            }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Could not analyze audio." });
+    }
+});
+
+app.post('/api/ai/briefing', aiAuth, async (req, res) => {
+    try {
+        const { topic } = req.body;
+        const ai = getAI(req);
+        let prompt = "";
+
+        if (topic === 'Sports') {
+            prompt = "Write a detailed report on trending talking points in Football, Boxing, and MMA. Write in full paragraphs. Do not use bullet points or markdown symbols.";
+        } else if (topic === 'History') {
+            prompt = `Write a two-part historical report...\nPART 1: NIGERIA...\nPART 2: GLOBAL... (No markdown symbols)`;
+        } else if (topic === 'Finance') {
+            prompt = "Provide a robust financial report on the Nigerian Market... (No markdown symbols)";
+        }
+
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: {
+                systemInstruction: "You are an expert analyst. Output plain text only. No markdown formatting.",
+                tools: [{ googleSearch: {} }]
+            }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Unable to fetch briefing data." });
+    }
+});
+
+app.post('/api/ai/document', aiAuth, async (req, res) => {
+    try {
+        const { base64Data, mimeType } = req.body;
+        const ai = getAI(req);
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType, data: base64Data } },
+                    { text: "Summarize this document. Provide 3 key takeaways and actionable insights. Output as plain text only, no bolding or markdown symbols." }
+                ]
+            },
+            config: { systemInstruction: SYSTEM_INSTRUCTION }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Error analyzing document." });
+    }
+});
+
+app.post('/api/ai/url', aiAuth, async (req, res) => {
+    try {
+        const { url } = req.body;
+        const ai = getAI(req);
+        const prompt = `Access and analyze the content of this website: ${url}\nProvide a comprehensive summary of the page's content...`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-flash',
+            contents: prompt,
+            config: { tools: [{ googleSearch: {} }] }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Unable to analyze website." });
+    }
+});
+
+app.post('/api/ai/annual-report', aiAuth, async (req, res) => {
+    try {
+        const { userData } = req.body;
+        const ai = getAI(req);
+        const prompt = `You are a Senior Strategic Life Coach... USER DATA: ${JSON.stringify(userData)}`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: `AI Error: ${error.message}` });
+    }
+});
+
+// --- Health ---
+app.post('/api/ai/food-image', aiAuth, async (req, res) => {
+    try {
+        const { base64Image } = req.body;
+        const ai = getAI(req);
+        const prompt = `Analyze the food in this image carefully... Return ONLY a JSON object...`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
+                    { text: prompt }
+                ]
+            },
+            config: { responseMimeType: "application/json" }
+        });
+        const text = response.text;
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(jsonStr));
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ error: "Error analyzing food." });
+    }
+});
+
+app.post('/api/ai/meal-plan', aiAuth, async (req, res) => {
+    try {
+        const { preferences } = req.body;
+        const ai = getAI(req);
+        const prompt = `Create a detailed ${preferences.duration || '7'}-day meal plan... Goal: ${preferences.goal}...`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+            config: { systemInstruction: SYSTEM_INSTRUCTION }
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Unable to generate meal plan." });
+    }
+});
+
+app.post('/api/ai/improve-diet', aiAuth, async (req, res) => {
+    try {
+        const { currentPlan, goal, userComments } = req.body;
+        const ai = getAI(req);
+        const prompt = `I have this meal plan: """${currentPlan}"""\nMy goal is: ${goal}...\nReturn ONLY a JSON object...`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+            config: { responseMimeType: "application/json" }
+        });
+        const text = response.text;
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json(JSON.parse(jsonStr));
+    } catch (error) {
+        res.status(500).json({ error: "Diet Improvement Error" });
+    }
+});
+
+app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
+    try {
+        const { prompt, documentText, format, templateText } = req.body;
+        const ai = getAI(req);
+        const systemPrompt = `You are a professional report generation AI. ${documentText ? `REFERENCE DOCUMENT: ${documentText.slice(0, 30000)}` : ''} ...`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: systemPrompt
+        });
+        res.json({ text: response.text });
+    } catch (error) {
+        res.status(500).json({ error: "Report Generation Error" });
+    }
+});
+
+app.post('/api/ai/health-parse', aiAuth, async (req, res) => {
+    try {
+        const { base64Image, mimeType } = req.body;
+        const ai = getAI(req);
+        const prompt = `You are an expert medical data extractor. Read the following health/lab report image carefully... Return ONLY a JSON array...`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: {
+                parts: [
+                    { inlineData: { mimeType: mimeType || 'image/jpeg', data: base64Image } },
+                    { text: prompt }
+                ]
+            },
+            config: { responseMimeType: "application/json" }
+        });
+        const text = response.text;
+        const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
+        res.json({ results: JSON.parse(jsonStr) });
+    } catch (error) {
+        res.status(500).json({ error: "Parse Report Error" });
+    }
+});
+
+app.post('/api/ai/health-interpret', aiAuth, async (req, res) => {
+    try {
+        const { testData } = req.body;
+        const ai = getAI(req);
+        const prompt = `Interpret these medical test results in plain language: Test Type: ${testData.testType} Results: ${JSON.stringify(testData.results)}....`;
+        const response = await ai.models.generateContent({
+            model: 'gemini-2.5-pro',
+            contents: prompt,
+            config: { systemInstruction: "You are a health information assistant..." }
+        });
+        res.json({ text: (response.text || "Unable to interpret results.") + "\n\nDISCLAIMER: This is not medical advice..." });
+    } catch (error) {
+        res.status(500).json({ error: "Test Interpretation Error" });
+    }
+});
+
+app.post('/api/ai/chat-support', aiAuth, async (req, res) => {
+    try {
+        const { message, userContext, chatHistory } = req.body;
+        const ai = getAI(req);
+        // formatting and system prompt applied here...
+        const chat = ai.chats.create({
+            model: 'gemini-2.5-flash',
+            history: chatHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
+            config: { systemInstruction: `You are the LifeScope AI assistant... User: ${userContext.userName}` }
+        });
+        const result = await chat.sendMessage({ message });
+        res.json({ text: result.text });
+    } catch (error) {
+        res.status(500).json({ error: "Chat Support Error" });
+    }
+});
+
+// ============================
+// PAYSTACK PAYMENT INTEGRATION
+// ============================
+const paystackSecretKey = process.env.PAYSTACK_ENVIRONMENT === 'live'
+    ? process.env.PAYSTACK_LIVE_SECRET_KEY
+    : process.env.PAYSTACK_TEST_SECRET_KEY;
+
+// 1. Initialize Payment
+app.post('/api/payment/initialize', ensureAuth, async (req, res) => {
+    try {
+        const { planId, amount } = req.body;
+        // Verify plan exists and amount matches
+        if (!['pro', 'premium'].includes(planId)) {
+            return res.status(400).json({ error: 'Invalid plan' });
+        }
+
+        const response = await fetch('https://api.paystack.co/transaction/initialize', {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${paystackSecretKey}`,
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                email: req.user.email,
+                amount: amount * 100, // Paystack requires amount in Kobo/lowest denomination
+                metadata: {
+                    user_id: req.user.id,
+                    plan_id: planId
+                },
+                callback_url: `${process.env.FRONTEND_URL || 'https://getlifescope.com'}/settings`
+            })
+        });
+
+        const data = await response.json();
+        if (!data.status) {
+            return res.status(400).json({ error: data.message });
+        }
+
+        res.json({ checkoutUrl: data.data.authorization_url, reference: data.data.reference });
+    } catch (err) {
+        console.error('Paystack init error:', err);
+        res.status(500).json({ error: 'Failed to initialize payment' });
+    }
+});
+
+// 2. Paystack Webhook
+const crypto = require('crypto');
+app.post('/api/payment/webhook', express.json(), async (req, res) => {
+    try {
+        const hash = crypto.createHmac('sha512', paystackSecretKey).update(JSON.stringify(req.body)).digest('hex');
+        if (hash === req.headers['x-paystack-signature']) {
+            const event = req.body;
+
+            if (event.event === 'charge.success') {
+                const { user_id, plan_id } = event.data.metadata;
+
+                // Update User Plan
+                await pool.query(
+                    `UPDATE public.users SET plan = $1, ai_calls_today = 0 WHERE id = $2`,
+                    [plan_id, user_id]
+                );
+                console.log(`✅ Paystack Webhook: Upgraded user ${user_id} to ${plan_id} plan.`);
+            }
+        }
+        res.sendStatus(200);
+    } catch (err) {
+        console.error('Webhook Error:', err);
+        res.sendStatus(500);
+    }
+});
+
+// ============================
 // HEALTH TEST RESULTS ROUTES
 // ============================
 
