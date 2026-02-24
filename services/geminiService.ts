@@ -1,4 +1,4 @@
-import api from './api';
+import { api } from './api';
 import { logError } from '../utils/debugLogger';
 
 // Helper to pass dynamic key if user set it
