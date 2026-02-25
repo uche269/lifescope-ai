@@ -244,7 +244,7 @@ const Settings: React.FC = () => {
                                         </div>
                                         <p className="text-2xl font-black text-white my-2">₦10,000<span className="text-xs text-slate-500 font-normal">/mo</span></p>
                                         <ul className="text-xs text-slate-400 space-y-2 mb-4">
-                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> 2000 AI Credits / wk</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> 500 AI Credits / wk</li>
                                             <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> Latest Reasoning Engine</li>
                                             <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> Perfect Generated Charts</li>
                                         </ul>

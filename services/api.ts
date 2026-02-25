@@ -20,15 +20,16 @@ export const api = {
         return json.data !== undefined ? json.data : json;
     },
 
-    post: async (table: string, data: any, options?: RequestInit) => {
-        const res = await fetch(`${API_BASE}/${table}`, {
+    post: async (tableOrEndpoint: string, data: any, options?: RequestInit) => {
+        const url = tableOrEndpoint.startsWith('/') ? tableOrEndpoint : `${API_BASE}/${tableOrEndpoint}`;
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...options?.headers },
             credentials: 'include',
             ...options,
             body: JSON.stringify(data)
         });
-        if (!res.ok) throw new Error(`Failed to insert into ${table}`);
+        if (!res.ok) throw new Error(`Failed to POST to ${tableOrEndpoint}`);
         const json = await res.json();
         return json.data !== undefined ? json.data : json;
     },

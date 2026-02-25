@@ -649,8 +649,8 @@ app.get('/api/auth/me', async (req, res) => {
             // Determine effective plan
             const effectivePlan = user.is_admin ? 'admin' : user.plan;
 
-            // AI weekly limits per plan (free: 20, premium: 200, pro: 2000)
-            const limits = { free: 20, premium: 200, pro: 2000, admin: 999999 };
+            // AI weekly limits per plan (free: 20, premium: 200, pro: 500)
+            const limits = { free: 20, premium: 200, pro: 500, admin: 999999 };
             const aiLimit = limits[effectivePlan] ?? 20;
             const used = user.ai_calls_today || 0;
             const topup = user.topup_credits || 0;
@@ -705,7 +705,7 @@ const checkAIQuota = async (req, res, next) => {
         // Determine effective plan
         const effectivePlan = user.is_admin ? 'admin' : user.plan;
 
-        const limits = { free: 20, premium: 200, pro: 2000, admin: 999999 };
+        const limits = { free: 20, premium: 200, pro: 500, admin: 999999 };
         const limit = limits[effectivePlan] || 20;
         const used = user.ai_calls_today || 0;
         const topup = user.topup_credits || 0;
