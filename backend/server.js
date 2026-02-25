@@ -2138,17 +2138,44 @@ app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
         const { prompt, documentText, format, templateText } = req.body;
         const claudeModel = getClaudeModel(req);
 
+        const chartInstructions = `
+CHART DATA FORMAT (CRITICAL):
+When your report includes numerical data that would benefit from visualization (trends, comparisons, distributions), you MUST include chart data blocks. Format each chart EXACTLY like this:
+
+---SLIDE---
+Title: [Section Title]
+Layout: split
+Content: [Your text analysis for this section]
+---CHART---
+Type: [bar OR line OR pie]
+Labels: [Label1, Label2, Label3, Label4]
+Values: [100, 200, 150, 300]
+
+RULES FOR CHARTS:
+- Include at least 2-3 charts in every report where data is available
+- Use "bar" for comparisons, "line" for trends over time, "pie" for proportions
+- Labels and Values must have the same number of comma-separated items
+- Values must be numbers only (no currency symbols, no % signs)
+- Use "Layout: split" when a chart is present, "Layout: full" for text-only sections
+- Separate each section with ---SLIDE---
+- For sections WITHOUT charts, just use:
+---SLIDE---
+Title: [Section Title]
+Layout: full
+Content: [Your text content]
+`;
+
         const formatInstructions = {
-            pdf: 'Structure the report with clear section headings (use CAPS), executive summary, detailed analysis with data points, and a conclusion with recommendations. Use numbered lists and paragraphs. Aim for 1500-2500 words.',
-            docx: 'Structure as a formal document with Title, Executive Summary, Table of Contents outline, detailed sections with sub-headings, data tables where relevant, and appendices. Use professional business language. Aim for 2000-3000 words.',
+            pdf: `Structure as a multi-section report. ${chartInstructions}\nStart with an Executive Summary section, then detailed analysis sections with charts, and end with Conclusions and Recommendations. Aim for 1500-2500 words of text content plus 2-3 charts.`,
+            docx: `Structure as a formal document. ${chartInstructions}\nInclude Title, Executive Summary, detailed sections with sub-headings and charts where relevant, and appendices. Use professional business language. Aim for 2000-3000 words plus charts.`,
             xlsx: 'Return data in a structured tabular format. Use | (pipe) to separate columns, and new lines for rows. First row must be headers. Include multiple data tables if the topic warrants it. Add a summary row at the bottom of each table.',
-            pptx: 'Structure as presentation slides. Each slide should have: SLIDE [N]: TITLE followed by 3-5 concise bullet points. Include a title slide, agenda slide, 8-12 content slides, and a summary slide. Keep bullet points concise (under 15 words each).'
+            pptx: `Structure as presentation slides using the exact format below. ${chartInstructions}\nInclude a title slide, agenda slide, 8-12 content slides (at least 3 with charts), and a summary slide. Keep bullet points concise (under 15 words each).`
         };
 
         const contextText = documentText ? `\nREFERENCE DOCUMENT:\n---\n${documentText.slice(0, 30000)}\n---\n` : '';
         const templateSection = templateText ? `\nREQUIRED TEMPLATE STRUCTURE:\n---\n${templateText.slice(0, 15000)}\n---\nCRITICAL: Match the layout, headings, style, and outline of this template exactly. Fill in the data without breaking the template structure.\n` : '';
 
-        const systemPrompt = `You are a world-class report generation AI used by executives and professionals. Your reports should be comprehensive, data-driven, and publication-ready.\n${contextText}${templateSection}\nThe user wants a report on: "${prompt}"\n\nFormat requirement: ${formatInstructions[format] || formatInstructions.pdf}\n\nQUALITY STANDARDS:\n1. Include specific data points, statistics, and figures wherever possible\n2. Cite trends and provide comparative analysis\n3. Include actionable recommendations\n4. Use professional, authoritative language\n5. Structure content logically with clear progression\n6. Do NOT use markdown formatting (no **, ##, --). Use CAPS for headings and numbered lists for structure.`;
+        const systemPrompt = `You are a world-class report generation AI used by executives and professionals. Your reports should be comprehensive, data-driven, and publication-ready.\n${contextText}${templateSection}\nThe user wants a report on: "${prompt}"\n\nFormat requirement: ${formatInstructions[format] || formatInstructions.pdf}\n\nQUALITY STANDARDS:\n1. Include specific data points, statistics, and figures wherever possible\n2. ALWAYS include chart data blocks for numerical data - this is CRITICAL for visual reports\n3. Cite trends and provide comparative analysis\n4. Include actionable recommendations\n5. Use professional, authoritative language\n6. Structure content logically with clear progression\n7. Do NOT use markdown formatting (no **, ##, --). Use CAPS for headings in text content.`;
 
         if (claudeModel && process.env.CLAUDE_API_KEY) {
             // Use Claude for Pro/Premium users
