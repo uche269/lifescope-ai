@@ -1673,27 +1673,38 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
 // Helper locally
 const getAI = async (req) => {
     const { GoogleGenAI } = await import('@google/genai');
-    // If user passed a key from front-end localStorage, use it. Else use server ENV
     const apiKey = req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
     return new GoogleGenAI({ apiKey });
 };
 
 const getModelName = (req) => {
-    // There is no gemini-3.1-pro model currently, overriding to the valid gemini-2.5-pro.
     if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'gemini-2.5-pro';
     if (req.userPlan === 'premium') return 'gemini-2.5-pro';
     return 'gemini-2.5-flash';
+};
+
+// Claude helper for report generation
+const getClaudeModel = (req) => {
+    if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'claude-sonnet-4-20250514';
+    if (req.userPlan === 'premium') return 'claude-3-5-haiku-20241022';
+    return null; // Free users use Gemini
+};
+
+const getClaudeClient = async () => {
+    const { default: Anthropic } = await import('@anthropic-ai/sdk');
+    return new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 };
 
 // We apply ensureAuth and checkAIQuota to ALL real AI usage routes
 const aiAuth = [ensureAuth, checkAIQuota];
 
 const SYSTEM_INSTRUCTION = `
-You are a personal AI Goal Tracker and Life Management Assistant. 
-Your output should be clear, concise, and action-oriented.
-IMPORTANT: Do NOT use Markdown formatting (no bolding **, no headers #, no bullet points *, no dashes -). 
-Write in clean, plain text paragraphs or simple numbered lists (1. 2. 3.) only if absolutely necessary.
-Always end responses by asking "What do you want to add, review, or improve today?".
+You are LifeScope AI, a world-class personal intelligence assistant.
+You provide detailed, expert-level advice that is actionable and personalized.
+Your output should be well-structured using numbered lists and clear paragraphs.
+IMPORTANT: Do NOT use Markdown formatting (no ** bolding, no # headers, no * bullet points, no --- dividers).
+Use plain text with numbered lists (1. 2. 3.) and clear paragraph breaks.
+Be thorough but concise. Prioritize actionable insights over generic advice.
 `;
 
 app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
@@ -1701,12 +1712,26 @@ app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
         const { goalTitle, currentStatus } = req.body;
         const ai = await getAI(req);
         const prompt = `
-            I have a goal: "${goalTitle}". 
-            Current status: ${currentStatus}.
-            Please provide 3 specific, actionable activities to help me achieve this, and 1 potential pitfall to avoid.
-            Format as a concise list (1. 2. 3. 4.). Do not use bold characters.
-        `;
+I have a goal: "${goalTitle}".
+Current status: ${currentStatus}.
 
+As a world-class life coach, analyze this goal and provide:
+
+1. SMART ANALYSIS: Briefly assess if this goal is Specific, Measurable, Achievable, Relevant, and Time-bound. Suggest refinements if needed.
+
+2. TOP 5 ACTIONABLE STEPS: Provide 5 specific, concrete activities I should do THIS WEEK to make meaningful progress. Each step should include:
+   a) The exact action to take
+   b) Estimated time commitment
+   c) Why this step matters
+
+3. KEY MILESTONES: Suggest 3 weekly milestones I can use to track progress over the next month.
+
+4. POTENTIAL PITFALLS: Identify 2 common mistakes people make with this type of goal and how to avoid them.
+
+5. RESOURCES: Suggest 2 free tools, apps, or resources that could help.
+
+Keep it practical and motivating. Use numbered lists, no markdown symbols.
+        `;
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: prompt,
@@ -1714,8 +1739,8 @@ app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
         });
         res.json({ text: response.text });
     } catch (error) {
-        console.error("AI Recomm Error:", error);
-        res.status(500).json({ error: "Unable to generate recommendations." });
+        console.error('AI Recomm Error:', error);
+        res.status(500).json({ error: 'Unable to generate recommendations.' });
     }
 });
 
@@ -1724,13 +1749,34 @@ app.post('/api/ai/scenario', aiAuth, async (req, res) => {
         const { scenario, level } = req.body;
         const ai = await getAI(req);
         const prompt = `
-            Scenario: ${scenario}
-            Level: ${level}
-            
-            Generate a role-play script for me to practice. 
-            Format it as a script (Me: ... You: ...).
-            Do NOT use any markdown formatting like ** or ## or ---.
-            Include actionable tone tips at the end.
+Scenario: ${scenario}
+Difficulty Level: ${level}
+
+Generate a comprehensive role-play practice session:
+
+SCENE 1 - THE OPENING:
+Write a realistic dialogue between "Me" and "You" for the opening of this scenario. Include 4-6 exchanges.
+
+SCENE 2 - THE CHALLENGE:
+Write a tougher version where the other person pushes back or raises objections. Include 4-6 exchanges showing how to navigate difficulty.
+
+SCENE 3 - THE RESOLUTION:
+Show how to bring the conversation to a positive conclusion. Include 3-4 exchanges.
+
+BODY LANGUAGE TIPS:
+Provide 4 specific body language cues to use during this scenario (posture, eye contact, gestures, voice tone).
+
+COMMON MISTAKES:
+List 3 mistakes people commonly make in this type of scenario and how to avoid them.
+
+DE-ESCALATION TECHNIQUES:
+Provide 2 phrases that can defuse tension if the conversation becomes heated.
+
+Format each scene as:
+Me: "..."
+You: "..."
+
+Do NOT use any markdown formatting like ** or ## or ---.
         `;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1739,7 +1785,7 @@ app.post('/api/ai/scenario', aiAuth, async (req, res) => {
         });
         res.json({ text: response.text });
     } catch (error) {
-        res.status(500).json({ error: "Error generating scenario." });
+        res.status(500).json({ error: 'Error generating scenario.' });
     }
 });
 
@@ -1775,13 +1821,33 @@ app.post('/api/ai/voice', aiAuth, async (req, res) => {
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
-                    { text: "Analyze this voice recording. Give feedback on 1) Confidence, 2) Clarity, 3) Tone. Do not use Markdown." }
+                    {
+                        text: `Analyze this voice recording like a professional speech coach. Provide:
+
+1. CONFIDENCE SCORE (1-10): Rate the speaker's confidence level and explain why.
+
+2. CLARITY SCORE (1-10): Rate how clearly the message was communicated.
+
+3. TONE ANALYSIS: Describe the emotional tone (warm, authoritative, nervous, etc.) and whether it matches the intended message.
+
+4. PACING: Is the speaker too fast, too slow, or well-paced? Note any rushed sections or awkward pauses.
+
+5. FILLER WORDS: Note any detected filler words (um, uh, like, you know) and their frequency.
+
+6. IMPROVEMENT EXERCISES: Suggest 3 specific exercises the speaker can do to improve:
+   a) A breathing exercise for confidence
+   b) A tongue-twister for clarity
+   c) A pacing exercise
+
+7. OVERALL SCORE (1-10): Give an overall communication effectiveness score.
+
+Do not use markdown formatting. Use plain numbered lists.` }
                 ]
             }
         });
         res.json({ text: response.text });
     } catch (error) {
-        res.status(500).json({ error: "Could not analyze audio." });
+        res.status(500).json({ error: 'Could not analyze audio.' });
     }
 });
 
@@ -1789,27 +1855,74 @@ app.post('/api/ai/briefing', aiAuth, async (req, res) => {
     try {
         const { topic } = req.body;
         const ai = await getAI(req);
-        let prompt = "";
+        let prompt = '';
 
         if (topic === 'Sports') {
-            prompt = "Write a detailed report on trending talking points in Football, Boxing, and MMA. Write in full paragraphs. Do not use bullet points or markdown symbols.";
+            prompt = `Write a comprehensive sports intelligence briefing covering the last 7 days:
+
+FOOTBALL (SOCCER):
+- Top 3 headline results and their significance
+- Key transfer rumors and confirmed deals
+- Upcoming fixtures to watch this week
+- Standout player performances with stats
+
+BOXING & MMA:
+- Recent fight results and analysis
+- Upcoming bouts and predictions
+- Rankings changes
+
+BREAKING NEWS:
+- Any major injury updates, controversies, or record-breaking moments
+
+Write in detailed paragraphs with clear section headers (use CAPS for headers, no markdown). Include specific scores, stats, and names.`;
         } else if (topic === 'History') {
-            prompt = `Write a two-part historical report...\nPART 1: NIGERIA...\nPART 2: GLOBAL... (No markdown symbols)`;
+            prompt = `Write a fascinating two-part historical intelligence briefing:
+
+PART 1 - NIGERIA TODAY IN HISTORY:
+- 3 significant events that happened on or around today's date in Nigerian history
+- For each event: what happened, who was involved, and why it still matters today
+- Include a lesser-known fact that most Nigerians don't know
+
+PART 2 - WORLD HISTORY:
+- 3 major global events from this date in history
+- Connect at least one to current events happening today
+- Include an inspiring quote from a historical figure relevant to today
+
+WRITING STYLE: Write like a historian telling a story, not listing facts. Make it engaging and educational. No markdown symbols, use CAPS for section headers.`;
         } else if (topic === 'Finance') {
-            prompt = "Provide a robust financial report on the Nigerian Market... (No markdown symbols)";
+            prompt = `Write a professional financial intelligence briefing:
+
+NIGERIAN MARKET:
+- Naira exchange rate update (USD, GBP, EUR)
+- Nigerian Stock Exchange (NGX) performance - top gainers and losers
+- Key economic indicators and government policy changes
+- CBN updates and monetary policy impact
+
+GLOBAL MARKETS:
+- US stock market summary (S&P 500, NASDAQ, Dow)
+- Cryptocurrency market update (BTC, ETH, SOL prices and trends)
+- Oil prices and their impact on Nigeria
+- Major global economic news
+
+INVESTMENT INSIGHT:
+- One actionable investment idea for Nigerian investors
+- Risk level assessment
+
+Write with specific numbers, percentages, and data points. No markdown symbols, use CAPS for section headers.`;
         }
 
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: prompt,
             config: {
-                systemInstruction: "You are an expert analyst. Output plain text only. No markdown formatting.",
+                systemInstruction: 'You are a senior intelligence analyst and journalist. Provide detailed, data-driven briefings with specific facts, figures, and analysis. Output plain text only. No markdown formatting. Use CAPS for section headers.',
                 tools: [{ googleSearch: {} }]
             }
         });
         res.json({ text: response.text });
     } catch (error) {
-        res.status(500).json({ error: "Unable to fetch briefing data." });
+        console.error('Briefing Error:', error);
+        res.status(500).json({ error: 'Unable to fetch briefing data.' });
     }
 });
 
@@ -1822,14 +1935,32 @@ app.post('/api/ai/document', aiAuth, async (req, res) => {
             contents: {
                 parts: [
                     { inlineData: { mimeType, data: base64Data } },
-                    { text: "Summarize this document. Provide 3 key takeaways and actionable insights. Output as plain text only, no bolding or markdown symbols." }
+                    {
+                        text: `Analyze this document thoroughly and provide:
+
+1. DOCUMENT TYPE: Identify what kind of document this is (invoice, contract, report, letter, etc.)
+
+2. EXECUTIVE SUMMARY: A 3-4 sentence overview of the document's purpose and key message.
+
+3. KEY INFORMATION EXTRACTED:
+   - Important dates, names, and figures mentioned
+   - Financial amounts if any
+   - Deadlines or action items
+
+4. CRITICAL TAKEAWAYS: The 3 most important things the reader needs to know.
+
+5. ACTION ITEMS: What should the reader do based on this document? List specific next steps.
+
+6. SENTIMENT: Is the tone of this document positive, neutral, or concerning? Explain briefly.
+
+Output as plain text only. No bolding or markdown symbols. Use numbered lists for structure.` }
                 ]
             },
             config: { systemInstruction: SYSTEM_INSTRUCTION }
         });
         res.json({ text: response.text });
     } catch (error) {
-        res.status(500).json({ error: "Error analyzing document." });
+        res.status(500).json({ error: 'Error analyzing document.' });
     }
 });
 
@@ -1893,15 +2024,64 @@ app.post('/api/ai/meal-plan', aiAuth, async (req, res) => {
     try {
         const { preferences } = req.body;
         const ai = await getAI(req);
-        const prompt = `Create a detailed ${preferences.duration || '7'}-day meal plan... Goal: ${preferences.goal}...`;
+        const duration = preferences.duration || '7';
+        const prompt = `
+Create a comprehensive, detailed ${duration}-day meal plan.
+
+User Profile:
+- Goal: ${preferences.goal || 'General Health'}
+- Dietary Restrictions: ${preferences.restrictions || 'None specified'}
+- Cuisine Preference: ${preferences.cuisine || 'Mixed/International'}
+- Budget Level: ${preferences.budget || 'Moderate'}
+- Cooking Skill: ${preferences.skill || 'Intermediate'}
+
+For EACH DAY, provide:
+
+DAY [X]:
+
+Breakfast (Prep time: X mins)
+- Meal name and description
+- Ingredients with exact quantities
+- Calories: X | Protein: Xg | Carbs: Xg | Fat: Xg
+
+Morning Snack
+- Quick snack option with calories
+
+Lunch (Prep time: X mins)
+- Meal name and description
+- Ingredients with exact quantities
+- Calories: X | Protein: Xg | Carbs: Xg | Fat: Xg
+
+Afternoon Snack
+- Quick snack option with calories
+
+Dinner (Prep time: X mins)
+- Meal name and description
+- Ingredients with exact quantities
+- Calories: X | Protein: Xg | Carbs: Xg | Fat: Xg
+
+DAILY TOTALS: Calories: X | Protein: Xg | Carbs: Xg | Fat: Xg
+
+After all days, provide:
+
+WEEKLY GROCERY LIST:
+Organize by category (Proteins, Vegetables, Fruits, Grains, Dairy, Pantry Staples) with estimated quantities.
+
+ESTIMATED WEEKLY COST: Provide a rough cost estimate.
+
+MEAL PREP TIPS:
+3 time-saving tips for preparing multiple meals efficiently.
+
+IMPORTANT: Do not use any markdown formatting. Use plain text with CAPS headers and numbered lists.
+        `;
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: prompt,
-            config: { systemInstruction: SYSTEM_INSTRUCTION }
+            config: { systemInstruction: 'You are an expert nutritionist and meal planning specialist. Create detailed, balanced meal plans with accurate nutritional information. Output plain text only, no markdown.' }
         });
         res.json({ text: response.text });
     } catch (error) {
-        res.status(500).json({ error: "Unable to generate meal plan." });
+        res.status(500).json({ error: 'Unable to generate meal plan.' });
     }
 });
 
@@ -1909,32 +2089,92 @@ app.post('/api/ai/improve-diet', aiAuth, async (req, res) => {
     try {
         const { currentPlan, goal, userComments } = req.body;
         const ai = await getAI(req);
-        const prompt = `I have this meal plan: """${currentPlan}"""\nMy goal is: ${goal}...\nReturn ONLY a JSON object...`;
+        const prompt = `
+As an expert nutritionist, analyze and improve this meal plan:
+
+CURRENT PLAN:
+"""${currentPlan}"""
+
+User's Goal: ${goal}
+${userComments ? `User's Comments: ${userComments}` : ''}
+
+Provide your analysis as a JSON object with this structure:
+{
+  "nutritionalGaps": ["list of specific nutritional deficiencies identified"],
+  "improvements": [
+    {
+      "original": "original meal or item",
+      "replacement": "suggested replacement",
+      "reason": "why this substitution helps achieve the goal",
+      "nutritionalBenefit": "specific nutritional advantage"
+    }
+  ],
+  "timingOptimization": [
+    "suggestion about when to eat certain meals for optimal results"
+  ],
+  "additionalSupplements": ["any recommended supplements with dosage"],
+  "overallScore": 7,
+  "improvedScore": 9,
+  "summary": "2-3 sentence summary of the key changes and expected impact"
+}
+
+Return ONLY the JSON object, no other text.
+        `;
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: prompt,
-            config: { responseMimeType: "application/json" }
+            config: { responseMimeType: 'application/json' }
         });
         const text = response.text;
         const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
         res.json(JSON.parse(jsonStr));
     } catch (error) {
-        res.status(500).json({ error: "Diet Improvement Error" });
+        res.status(500).json({ error: 'Diet Improvement Error' });
     }
 });
 
 app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
     try {
         const { prompt, documentText, format, templateText } = req.body;
-        const ai = await getAI(req);
-        const systemPrompt = `You are a professional report generation AI. ${documentText ? `REFERENCE DOCUMENT: ${documentText.slice(0, 30000)}` : ''} ...`;
-        const response = await ai.models.generateContent({
-            model: getModelName(req),
-            contents: systemPrompt
-        });
-        res.json({ text: response.text });
+        const claudeModel = getClaudeModel(req);
+
+        const formatInstructions = {
+            pdf: 'Structure the report with clear section headings (use CAPS), executive summary, detailed analysis with data points, and a conclusion with recommendations. Use numbered lists and paragraphs. Aim for 1500-2500 words.',
+            docx: 'Structure as a formal document with Title, Executive Summary, Table of Contents outline, detailed sections with sub-headings, data tables where relevant, and appendices. Use professional business language. Aim for 2000-3000 words.',
+            xlsx: 'Return data in a structured tabular format. Use | (pipe) to separate columns, and new lines for rows. First row must be headers. Include multiple data tables if the topic warrants it. Add a summary row at the bottom of each table.',
+            pptx: 'Structure as presentation slides. Each slide should have: SLIDE [N]: TITLE followed by 3-5 concise bullet points. Include a title slide, agenda slide, 8-12 content slides, and a summary slide. Keep bullet points concise (under 15 words each).'
+        };
+
+        const contextText = documentText ? `\nREFERENCE DOCUMENT:\n---\n${documentText.slice(0, 30000)}\n---\n` : '';
+        const templateSection = templateText ? `\nREQUIRED TEMPLATE STRUCTURE:\n---\n${templateText.slice(0, 15000)}\n---\nCRITICAL: Match the layout, headings, style, and outline of this template exactly. Fill in the data without breaking the template structure.\n` : '';
+
+        const systemPrompt = `You are a world-class report generation AI used by executives and professionals. Your reports should be comprehensive, data-driven, and publication-ready.\n${contextText}${templateSection}\nThe user wants a report on: "${prompt}"\n\nFormat requirement: ${formatInstructions[format] || formatInstructions.pdf}\n\nQUALITY STANDARDS:\n1. Include specific data points, statistics, and figures wherever possible\n2. Cite trends and provide comparative analysis\n3. Include actionable recommendations\n4. Use professional, authoritative language\n5. Structure content logically with clear progression\n6. Do NOT use markdown formatting (no **, ##, --). Use CAPS for headings and numbered lists for structure.`;
+
+        if (claudeModel && process.env.CLAUDE_API_KEY) {
+            // Use Claude for Pro/Premium users
+            const claude = await getClaudeClient();
+            const claudeResponse = await claude.messages.create({
+                model: claudeModel,
+                max_tokens: 8192,
+                messages: [{ role: 'user', content: systemPrompt }]
+            });
+            const text = claudeResponse.content[0]?.text || '';
+            res.json({ text, engine: 'claude' });
+        } else {
+            // Use Gemini for Free users with Google Search grounding
+            const ai = await getAI(req);
+            const response = await ai.models.generateContent({
+                model: getModelName(req),
+                contents: systemPrompt,
+                config: {
+                    tools: [{ googleSearch: {} }]
+                }
+            });
+            res.json({ text: response.text, engine: 'gemini' });
+        }
     } catch (error) {
-        res.status(500).json({ error: "Report Generation Error" });
+        console.error('Report Generation Error:', error);
+        res.status(500).json({ error: 'Report Generation Error' });
     }
 });
 
@@ -1965,15 +2205,46 @@ app.post('/api/ai/health-interpret', aiAuth, async (req, res) => {
     try {
         const { testData } = req.body;
         const ai = await getAI(req);
-        const prompt = `Interpret these medical test results in plain language: Test Type: ${testData.testType} Results: ${JSON.stringify(testData.results)}....`;
+        const prompt = `
+As a medical information specialist, interpret these test results in detail:
+
+Test Type: ${testData.testType}
+Results: ${JSON.stringify(testData.results)}
+
+For EACH test parameter, provide:
+
+1. WHAT IT MEASURES: A simple explanation of what this test checks.
+
+2. YOUR RESULT: State the value and whether it is NORMAL, LOW, HIGH, or CRITICAL.
+
+3. NORMAL RANGE: Show the typical reference range for comparison.
+
+4. WHAT THIS MEANS: Explain in plain language what this result means for the patient's health. Use analogies if helpful.
+
+5. RISK LEVEL: Rate as LOW RISK, MODERATE RISK, or HIGH RISK with a brief explanation.
+
+After analyzing all parameters, provide:
+
+OVERALL HEALTH SNAPSHOT:
+A 3-4 sentence summary of the overall health picture from these results.
+
+LIFESTYLE RECOMMENDATIONS:
+5 specific lifestyle changes that could improve abnormal values (diet, exercise, sleep, stress management, supplements).
+
+WHEN TO SEE A DOCTOR:
+Clearly state if any results require urgent medical attention.
+
+Do not use markdown formatting. Use CAPS for section headers and numbered lists.
+        `;
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: prompt,
-            config: { systemInstruction: "You are a health information assistant..." }
+            config: { systemInstruction: 'You are a health information specialist. Explain test results clearly and thoroughly using plain language. Always be accurate with reference ranges. Output plain text only, no markdown formatting.' }
         });
-        res.json({ text: (response.text || "Unable to interpret results.") + "\n\nDISCLAIMER: This is not medical advice..." });
+        const disclaimer = '\n\nDISCLAIMER: This analysis is for informational purposes only and does not constitute medical advice. The information provided is AI-generated and may contain inaccuracies. Always consult a qualified healthcare provider before making any medical decisions or changes to your health regimen.';
+        res.json({ text: (response.text || 'Unable to interpret results.') + disclaimer });
     } catch (error) {
-        res.status(500).json({ error: "Test Interpretation Error" });
+        res.status(500).json({ error: 'Test Interpretation Error' });
     }
 });
 
@@ -1988,13 +2259,33 @@ app.post('/api/ai/chat-support', aiAuth, async (req, res) => {
         const chat = ai.chats.create({
             model: getModelName(req),
             history: safeHistory,
-            config: { systemInstruction: `You are the LifeScope AI assistant. You help the user manage their goals, finances, health, and documents. If they ask about upgrading, tell them to go to Settings -> Profile and click 'Upgrade Now' to get Premium for ₦5,000. User: ${userContext?.userName || 'User'}` }
+            config: {
+                systemInstruction: `You are LifeScope AI Assistant, a knowledgeable and friendly support agent.
+
+User: ${userContext?.userName || 'User'}
+Plan: ${userContext?.plan || 'free'}
+
+You can help with:
+1. GOALS: Creating goals, tracking progress, setting milestones, understanding categories
+2. FINANCE: Budget tracking, expense analysis, savings goals, investment basics
+3. HEALTH: Weight tracking, meal planning, body measurements, medical report uploads
+4. DOCUMENTS: Uploading and analyzing documents, generating reports, chatting with documents
+5. APP FEATURES: Explaining how any feature works, troubleshooting issues
+
+Upgrade Information:
+- Premium Plan (N5,000/month): 100 daily AI credits, Gemini 2.5 Pro, Claude Haiku for reports
+- Pro Plan (N15,000/month): 500 weekly AI credits, Gemini 2.5 Pro, Claude Sonnet for reports
+- To upgrade: Go to Settings then Profile and click Upgrade Now
+
+Be warm, helpful, and proactive. Suggest features the user might not know about.
+Do NOT use markdown formatting. Keep responses concise but thorough.
+If unsure about something, be honest and offer to escalate to the support team.` }
         });
         const result = await chat.sendMessage({ message });
         res.json({ text: result.text });
     } catch (error) {
         console.error('Chat Support Error:', error);
-        res.status(500).json({ error: "Chat Support Error" });
+        res.status(500).json({ error: 'Chat Support Error' });
     }
 });
 
