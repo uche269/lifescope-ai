@@ -41,11 +41,11 @@ const FAQ_DATABASE: FAQEntry[] = [
     },
     {
         patterns: ['upgrade', 'subscription', 'pro plan', 'premium plan', 'pricing', 'payment'],
-        answer: "To upgrade your plan, go to Settings and click on 'Plan & Billing'. You can choose between Pro ($4.99/mo) and Premium ($9.99/mo) with more AI features and higher limits."
+        answer: "To upgrade your plan, go to Settings and look at your Profile card. You can click 'Upgrade Now' to unlock the Premium tier (₦5,000) for unlimited AI features."
     },
     {
         patterns: ['trial', 'free trial', 'trial period', 'trial ending'],
-        answer: "New users get a 7-day free trial with full Pro features including AI analysis. After the trial, non-AI features like goal tracking and health logging remain free. Upgrade to Pro or Premium to continue using AI."
+        answer: "Currently, you are on the Free plan, which has limited daily AI interactions. To remove limits and access the most advanced Gemini models, you can upgrade to Premium from your Settings page."
     },
     {
         patterns: ['delete account', 'remove account', 'close account'],

@@ -1950,7 +1950,7 @@ app.post('/api/ai/chat-support', aiAuth, async (req, res) => {
         const chat = ai.chats.create({
             model: 'gemini-2.5-flash',
             history: chatHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-            config: { systemInstruction: `You are the LifeScope AI assistant... User: ${userContext.userName}` }
+            config: { systemInstruction: `You are the LifeScope AI assistant. You help the user manage their goals, finances, health, and documents. If they ask about upgrading, tell them to go to Settings -> Profile and click 'Upgrade Now' to get Premium for ₦5,000. User: ${userContext.userName}` }
         });
         const result = await chat.sendMessage({ message });
         res.json({ text: result.text });
