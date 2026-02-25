@@ -2005,7 +2005,6 @@ app.post('/api/payment/initialize', ensureAuth, async (req, res) => {
 });
 
 // 2. Paystack Webhook
-const crypto = require('crypto');
 app.post('/api/payment/webhook', express.json(), async (req, res) => {
     try {
         const hash = crypto.createHmac('sha512', paystackSecretKey).update(JSON.stringify(req.body)).digest('hex');
