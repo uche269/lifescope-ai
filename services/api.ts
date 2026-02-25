@@ -30,7 +30,16 @@ export const api = {
             ...options,
             body: JSON.stringify(data)
         });
-        if (!res.ok) throw new Error(`Failed to POST to ${tableOrEndpoint}`);
+        if (!res.ok) {
+            let errorMsg = `Failed to POST to ${tableOrEndpoint}`;
+            try {
+                const errData = await res.json();
+                if (errData.error) errorMsg = errData.error;
+            } catch (e) {
+                // Ignore JSON parse errors
+            }
+            throw new Error(errorMsg);
+        }
         const json = await res.json();
         return json.data !== undefined ? json.data : json;
     },
