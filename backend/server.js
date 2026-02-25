@@ -1678,7 +1678,7 @@ const getAI = (req) => {
 };
 
 const getModelName = (req) => {
-    if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'gemini-3.1-pro';
+    if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'gemini-2.5-pro';
     if (req.userPlan === 'premium') return 'gemini-2.5-pro';
     return 'gemini-2.5-flash';
 };
