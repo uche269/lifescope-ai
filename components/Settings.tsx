@@ -90,8 +90,8 @@ const Settings: React.FC = () => {
         try {
             // Amount is in Naira. Adjust based on your pricing. 
             const res = await api.post('/payment/initialize', { planId, amount });
-            if (res.data.checkoutUrl) {
-                window.location.href = res.data.checkoutUrl; // Redirect to Paystack
+            if (res.checkoutUrl) {
+                window.location.href = res.checkoutUrl; // Redirect to Paystack
             } else {
                 alert("Failed to initiate payment checkout.");
             }
