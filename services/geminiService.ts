@@ -10,7 +10,7 @@ const getHeaders = () => {
 export const getAIRecommendation = async (goalTitle: string, currentStatus: string) => {
   try {
     const res = await api.post('/ai/recommendation', { goalTitle, currentStatus }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("AI Recommendation Error:", error);
     return "Unable to generate recommendations. Please check your AI Quota or API Key.";
@@ -20,7 +20,7 @@ export const getAIRecommendation = async (goalTitle: string, currentStatus: stri
 export const generateScenarioScript = async (scenario: string, level: 'Beginner' | 'Advanced') => {
   try {
     const res = await api.post('/ai/scenario', { scenario, level }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Scenario Gen Error:", error);
     return "Error generating scenario. Please check your AI Quota or API Key.";
@@ -30,7 +30,7 @@ export const generateScenarioScript = async (scenario: string, level: 'Beginner'
 export const chatWithAI = async (history: { role: string, parts: { text: string }[] }[], message: string) => {
   try {
     const res = await api.post('/ai/chat', { history, message }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     return "I'm having trouble connecting. Please check your AI Quota or API Key.";
   }
@@ -39,7 +39,7 @@ export const chatWithAI = async (history: { role: string, parts: { text: string 
 export const analyzeVoice = async (audioBase64: string) => {
   try {
     const res = await api.post('/ai/voice', { audioBase64 }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Voice Analysis Error", error);
     return "Could not analyze audio. Please ensure you have a valid Gemini API Key or enough Quota.";
@@ -49,7 +49,7 @@ export const analyzeVoice = async (audioBase64: string) => {
 export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance') => {
   try {
     const res = await api.post('/ai/briefing', { topic }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Briefing Error:", error);
     return "Unable to fetch briefing data. Please check your Quota or API Key.";
@@ -59,7 +59,7 @@ export const getWeeklyBriefing = async (topic: 'Sports' | 'History' | 'Finance')
 export const analyzeDocument = async (base64Data: string, mimeType: string) => {
   try {
     const res = await api.post('/ai/document', { base64Data, mimeType }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Doc Analysis Error:", error);
     return "Error analyzing document. Please check your Quota or API Key.";
@@ -69,7 +69,7 @@ export const analyzeDocument = async (base64Data: string, mimeType: string) => {
 export const analyzeUrl = async (url: string) => {
   try {
     const res = await api.post('/ai/url', { url }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("URL Analysis Error:", error);
     return "Unable to analyze website. Please ensure your Quota is not exceeded or your key supports grounding.";
@@ -81,7 +81,7 @@ export const analyzeUrl = async (url: string) => {
 export const generateAnnualReport = async (userData: any) => {
   try {
     const res = await api.post('/ai/annual-report', { userData }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error: any) {
     logError("API / Quota Error generating Report", { message: error.message, details: error });
     return `AI Error: Unable to generate report. Max Quota reached?`;
@@ -93,7 +93,7 @@ export const generateAnnualReport = async (userData: any) => {
 export const analyzeFoodImage = async (base64Image: string) => {
   try {
     const res = await api.post('/ai/food-image', { base64Image }, { headers: getHeaders() });
-    return res.data;
+    return res;
   } catch (error) {
     console.error("Food Analysis Error:", error);
     return null;
@@ -103,7 +103,7 @@ export const analyzeFoodImage = async (base64Image: string) => {
 export const generateMealPlan = async (preferences: any) => {
   try {
     const res = await api.post('/ai/meal-plan', { preferences }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Meal Plan Error:", error);
     return "Unable to generate meal plan at this time.";
@@ -113,7 +113,7 @@ export const generateMealPlan = async (preferences: any) => {
 export const improveDietPlan = async (currentPlan: string, goal: string, userComments: string = "") => {
   try {
     const res = await api.post('/ai/improve-diet', { currentPlan, goal, userComments }, { headers: getHeaders() });
-    return res.data;
+    return res;
   } catch (error) {
     console.error("Diet Improvement Error", error);
     return null;
@@ -129,7 +129,7 @@ export const chatWithSupport = async (
 ) => {
   try {
     const res = await api.post('/ai/chat-support', { message, userContext, chatHistory }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Chat Support Error:", error);
     return "I'm having trouble connecting to support AI.";
@@ -141,7 +141,7 @@ export const chatWithSupport = async (
 export const parseHealthReport = async (base64Image: string, mimeType: string = 'image/jpeg') => {
   try {
     const res = await api.post('/ai/health-parse', { base64Image, mimeType }, { headers: getHeaders() });
-    return res.data.results || [];
+    return res.results || [];
   } catch (error) {
     console.error("Parse Report Error:", error);
     return [];
@@ -151,7 +151,7 @@ export const parseHealthReport = async (base64Image: string, mimeType: string = 
 export const interpretTestResults = async (testData: { testType: string; results: Record<string, any> }) => {
   try {
     const res = await api.post('/ai/health-interpret', { testData }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Test Interpretation Error:", error);
     return "Error interpreting test results. Please try again or check your API quota.";
@@ -205,7 +205,7 @@ export const healthChat = async (
       systemInstructionOverride: systemPrompt
     }, { headers: getHeaders() });
 
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Health Chat Error:", error);
     return "Error processing your health question. Please check your Quota.";
@@ -232,7 +232,7 @@ export const chatWithDocument = async (
       systemInstructionOverride: systemPrompt
     }, { headers: getHeaders() });
 
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Document Chat Error:", error);
     throw error;
@@ -247,7 +247,7 @@ export const generateReport = async (
 ) => {
   try {
     const res = await api.post('/ai/report-gen', { prompt, documentText, format, templateText }, { headers: getHeaders() });
-    return res.data.text;
+    return res.text;
   } catch (error) {
     console.error("Report Generation Error:", error);
     throw error;
