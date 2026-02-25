@@ -195,7 +195,7 @@ const Settings: React.FC = () => {
                             </div>
 
                             {/* Premium Upsell Card */}
-                            {planInfo?.effectivePlan === 'free' && (
+                            {planInfo?.effectivePlan !== 'premium' && (
                                 <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/30 rounded-xl p-5 flex items-start gap-4 mt-4">
                                     <div className="p-2 bg-indigo-500/20 rounded-lg shrink-0">
                                         <Sparkles className="w-5 h-5 text-indigo-400" />
