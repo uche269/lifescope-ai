@@ -4,11 +4,10 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 const API_URL = '/api';
 
 interface UserPlanInfo {
-  effectivePlan: 'free' | 'pro' | 'premium';
+  effectivePlan: 'free' | 'pro' | 'premium' | 'admin';
   aiCallsRemaining: number;
   aiCallsLimit: number;
-  trialActive: boolean;
-  trialDaysLeft: number;
+  topupCredits: number;
   is_admin: boolean;
 }
 
@@ -52,8 +51,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             effectivePlan: u.effectivePlan || 'free',
             aiCallsRemaining: u.aiCallsRemaining ?? 0,
             aiCallsLimit: u.aiCallsLimit ?? 10,
-            trialActive: u.trialActive ?? false,
-            trialDaysLeft: u.trialDaysLeft ?? 0,
+            topupCredits: u.topupCredits ?? 0,
             is_admin: u.is_admin ?? false
           });
         }

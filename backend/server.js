@@ -187,6 +187,11 @@ const initDb = async () => {
             );
         `);
 
+        await pool.query(`
+            ALTER TABLE public.users 
+            ADD COLUMN IF NOT EXISTS topup_credits INTEGER DEFAULT 0;
+        `);
+
         console.log("✅ Database schema ensured (all tables)");
     } catch (err) {
         console.error("❌ Database schema init failed:", err);
@@ -280,17 +285,13 @@ passport.use(new GoogleStrategy({
             let { rows } = await pool.query('SELECT * FROM public.users WHERE email = $1', [email]);
 
             if (rows.length === 0) {
-                // 2. Create new user with 7-day trial
-                const trialEnd = new Date();
-                trialEnd.setDate(trialEnd.getDate() + 7);
-
-                const result = await pool.query(
-                    `INSERT INTO public.users (email, full_name, avatar_url, google_id, plan, trial_ends_at, last_login, is_verified) 
-                     VALUES ($1, $2, $3, $4, 'free', $5, NOW(), true) RETURNING *`,
-                    [email, profile.displayName, profile.photos[0]?.value, googleId, trialEnd]
+                const { rows: newRows } = await pool.query(
+                    `INSERT INTO public.users (email, full_name, google_id, avatar_url, plan, last_login, is_verified) 
+                     VALUES ($1, $2, $3, $4, 'free', NOW(), true) RETURNING *`,
+                    [profile.emails[0].value, profile.displayName, profile.id, profile.photos[0].value]
                 );
-                rows = result.rows;
-                console.log(`✅ New user registered: ${email} (trial until ${trialEnd.toLocaleDateString()})`);
+                console.log(`✅ New user registered: ${email}`);
+                return done(null, newRows[0]);
             } else {
                 // 3. Update last login and google_id if missing
                 await pool.query(
@@ -376,14 +377,12 @@ app.post('/api/auth/register', async (req, res) => {
         const passwordHash = await bcrypt.hash(password, salt);
 
         // Create user
-        const trialEnd = new Date();
-        trialEnd.setDate(trialEnd.getDate() + 7);
         const token = crypto.randomBytes(32).toString('hex');
 
         const { rows } = await pool.query(
-            `INSERT INTO public.users (email, password_hash, full_name, phone, plan, trial_ends_at, last_login, is_verified, verification_token) 
-             VALUES ($1, $2, $3, $4, 'free', $5, NOW(), false, $6) RETURNING *`,
-            [email, passwordHash, fullName, phone, trialEnd, token]
+            `INSERT INTO public.users (email, password_hash, full_name, phone, plan, last_login, is_verified, verification_token) 
+             VALUES ($1, $2, $3, $4, 'free', NOW(), false, $5) RETURNING *`,
+            [email, passwordHash, fullName, phone, token]
         );
 
         const user = rows[0];
@@ -636,30 +635,41 @@ app.get('/api/auth/me', async (req, res) => {
             const { rows } = await pool.query('SELECT * FROM public.users WHERE id = $1', [req.user.id]);
             const user = rows[0];
 
-            // Reset daily AI counter if needed
-            const today = new Date().toISOString().split('T')[0];
-            if (user.ai_calls_reset_at?.toISOString?.()?.split('T')[0] !== today) {
-                await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, today]);
+            // Reset weekly AI counter if 7 days have passed
+            const now = new Date();
+            const lastReset = user.ai_calls_reset_at ? new Date(user.ai_calls_reset_at) : new Date(0);
+            const daysSinceReset = (now - lastReset) / (1000 * 60 * 60 * 24);
+
+            if (daysSinceReset >= 7) {
+                const todayStr = now.toISOString().split('T')[0];
+                await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, todayStr]);
                 user.ai_calls_today = 0;
             }
 
-            // Determine effective plan (trial = pro features)
-            const now = new Date();
-            const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
-            const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
+            // Determine effective plan
+            const effectivePlan = user.is_admin ? 'admin' : user.plan;
 
-            // AI limits per plan (admin gets 'premium' effectivePlan so is always unlimited)
-            const limits = { free: 10, pro: 10, premium: 999999 };
-            const aiLimit = limits[effectivePlan] ?? 10;
+            // AI weekly limits per plan (free: 20, premium: 200, pro: 2000)
+            const limits = { free: 20, premium: 200, pro: 2000, admin: 999999 };
+            const aiLimit = limits[effectivePlan] ?? 20;
+            const used = user.ai_calls_today || 0;
+            const topup = user.topup_credits || 0;
+
+            // Compute total remaining (daily + topup)
+            let callsRemaining = 0;
+            if (used < aiLimit) {
+                callsRemaining = (aiLimit - used) + topup;
+            } else {
+                callsRemaining = topup;
+            }
 
             res.json({
                 user: {
                     ...user,
-                    effectivePlan,
-                    aiCallsRemaining: Math.max(0, aiLimit - (user.ai_calls_today || 0)),
+                    effectivePlan: user.is_admin ? 'premium' : user.plan,
+                    aiCallsRemaining: callsRemaining,
                     aiCallsLimit: aiLimit,
-                    trialActive: !!inTrial,
-                    trialDaysLeft: inTrial ? Math.ceil((new Date(user.trial_ends_at) - now) / (1000 * 60 * 60 * 24)) : 0
+                    topupCredits: topup
                 }
             });
         } catch (err) {
@@ -681,33 +691,45 @@ const checkAIQuota = async (req, res, next) => {
         const user = rows[0];
         if (!user) return res.status(401).json({ error: 'User not found' });
 
-        // Reset daily counter if needed
-        const today = new Date().toISOString().split('T')[0];
-        if (user.ai_calls_reset_at?.toISOString?.()?.split('T')[0] !== today) {
-            await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, today]);
+        // Reset weekly counter if 7 days have passed
+        const now = new Date();
+        const lastReset = user.ai_calls_reset_at ? new Date(user.ai_calls_reset_at) : new Date(0);
+        const daysSinceReset = (now - lastReset) / (1000 * 60 * 60 * 24);
+
+        if (daysSinceReset >= 7) {
+            const todayStr = now.toISOString().split('T')[0];
+            await pool.query('UPDATE public.users SET ai_calls_today = 0, ai_calls_reset_at = $2 WHERE id = $1', [user.id, todayStr]);
             user.ai_calls_today = 0;
         }
 
         // Determine effective plan
-        const now = new Date();
-        const inTrial = user.trial_ends_at && new Date(user.trial_ends_at) > now;
-        const effectivePlan = user.is_admin ? 'premium' : (inTrial ? 'pro' : user.plan);
+        const effectivePlan = user.is_admin ? 'admin' : user.plan;
 
-        const limits = { free: 10, pro: 10, premium: 999999 };
-        const limit = limits[effectivePlan] || 0;
+        const limits = { free: 20, premium: 200, pro: 2000, admin: 999999 };
+        const limit = limits[effectivePlan] || 20;
+        const used = user.ai_calls_today || 0;
+        const topup = user.topup_credits || 0;
 
-        if ((user.ai_calls_today || 0) >= limit) {
-            return res.status(429).json({
-                error: 'AI quota exceeded',
-                plan: effectivePlan,
-                limit,
-                used: user.ai_calls_today,
-                upgradeUrl: '/settings'
-            });
+        if (used >= limit) {
+            if (topup > 0) {
+                // Deduct from top-up buffer
+                await pool.query('UPDATE public.users SET topup_credits = topup_credits - 1, ai_calls_today = ai_calls_today + 1 WHERE id = $1', [user.id]);
+            } else {
+                return res.status(429).json({
+                    error: 'AI quota exceeded',
+                    plan: user.plan,
+                    limit,
+                    used,
+                    upgradeUrl: '/settings'
+                });
+            }
+        } else {
+            // Deduct normally from daily limit
+            await pool.query('UPDATE public.users SET ai_calls_today = ai_calls_today + 1 WHERE id = $1', [user.id]);
         }
 
-        // Increment counter
-        await pool.query('UPDATE public.users SET ai_calls_today = ai_calls_today + 1 WHERE id = $1', [user.id]);
+        // Pass the user's plan down so the AI endpoints know which model to use
+        req.userPlan = effectivePlan;
         next();
     } catch (err) {
         console.error('AI Quota check error:', err);
@@ -1655,6 +1677,12 @@ const getAI = (req) => {
     return new GoogleGenAI({ apiKey });
 };
 
+const getModelName = (req) => {
+    if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'gemini-3.1-pro';
+    if (req.userPlan === 'premium') return 'gemini-2.5-pro';
+    return 'gemini-2.5-flash';
+};
+
 // We apply ensureAuth and checkAIQuota to ALL real AI usage routes
 const aiAuth = [ensureAuth, checkAIQuota];
 
@@ -1678,7 +1706,7 @@ app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
         `;
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             contents: prompt,
             config: { systemInstruction: SYSTEM_INSTRUCTION }
         });
@@ -1703,7 +1731,7 @@ app.post('/api/ai/scenario', aiAuth, async (req, res) => {
             Include actionable tone tips at the end.
         `;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             contents: prompt,
             config: { systemInstruction: SYSTEM_INSTRUCTION }
         });
@@ -1718,7 +1746,7 @@ app.post('/api/ai/chat', aiAuth, async (req, res) => {
         const { history, message } = req.body;
         const ai = getAI(req);
         const chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             history: history,
             config: {
                 systemInstruction: "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
@@ -1736,7 +1764,7 @@ app.post('/api/ai/voice', aiAuth, async (req, res) => {
         const { audioBase64 } = req.body;
         const ai = getAI(req);
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'audio/wav', data: audioBase64 } },
@@ -1765,7 +1793,7 @@ app.post('/api/ai/briefing', aiAuth, async (req, res) => {
         }
 
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             contents: prompt,
             config: {
                 systemInstruction: "You are an expert analyst. Output plain text only. No markdown formatting.",
@@ -1783,7 +1811,7 @@ app.post('/api/ai/document', aiAuth, async (req, res) => {
         const { base64Data, mimeType } = req.body;
         const ai = getAI(req);
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: {
                 parts: [
                     { inlineData: { mimeType, data: base64Data } },
@@ -1804,7 +1832,7 @@ app.post('/api/ai/url', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `Access and analyze the content of this website: ${url}\nProvide a comprehensive summary of the page's content...`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             contents: prompt,
             config: { tools: [{ googleSearch: {} }] }
         });
@@ -1820,7 +1848,7 @@ app.post('/api/ai/annual-report', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `You are a Senior Strategic Life Coach... USER DATA: ${JSON.stringify(userData)}`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: prompt
         });
         res.json({ text: response.text });
@@ -1836,7 +1864,7 @@ app.post('/api/ai/food-image', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `Analyze the food in this image carefully... Return ONLY a JSON object...`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: {
                 parts: [
                     { inlineData: { mimeType: 'image/jpeg', data: base64Image } },
@@ -1860,7 +1888,7 @@ app.post('/api/ai/meal-plan', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `Create a detailed ${preferences.duration || '7'}-day meal plan... Goal: ${preferences.goal}...`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: prompt,
             config: { systemInstruction: SYSTEM_INSTRUCTION }
         });
@@ -1876,7 +1904,7 @@ app.post('/api/ai/improve-diet', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `I have this meal plan: """${currentPlan}"""\nMy goal is: ${goal}...\nReturn ONLY a JSON object...`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: prompt,
             config: { responseMimeType: "application/json" }
         });
@@ -1894,7 +1922,7 @@ app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const systemPrompt = `You are a professional report generation AI. ${documentText ? `REFERENCE DOCUMENT: ${documentText.slice(0, 30000)}` : ''} ...`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: systemPrompt
         });
         res.json({ text: response.text });
@@ -1909,7 +1937,7 @@ app.post('/api/ai/health-parse', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `You are an expert medical data extractor. Read the following health/lab report image carefully... Return ONLY a JSON array...`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: {
                 parts: [
                     { inlineData: { mimeType: mimeType || 'image/jpeg', data: base64Image } },
@@ -1932,7 +1960,7 @@ app.post('/api/ai/health-interpret', aiAuth, async (req, res) => {
         const ai = getAI(req);
         const prompt = `Interpret these medical test results in plain language: Test Type: ${testData.testType} Results: ${JSON.stringify(testData.results)}....`;
         const response = await ai.models.generateContent({
-            model: 'gemini-2.5-pro',
+            model: getModelName(req),
             contents: prompt,
             config: { systemInstruction: "You are a health information assistant..." }
         });
@@ -1948,7 +1976,7 @@ app.post('/api/ai/chat-support', aiAuth, async (req, res) => {
         const ai = getAI(req);
         // formatting and system prompt applied here...
         const chat = ai.chats.create({
-            model: 'gemini-2.5-flash',
+            model: getModelName(req),
             history: chatHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
             config: { systemInstruction: `You are the LifeScope AI assistant. You help the user manage their goals, finances, health, and documents. If they ask about upgrading, tell them to go to Settings -> Profile and click 'Upgrade Now' to get Premium for ₦5,000. User: ${userContext.userName}` }
         });
@@ -1971,7 +1999,7 @@ app.post('/api/payment/initialize', ensureAuth, async (req, res) => {
     try {
         const { planId, amount } = req.body;
         // Verify plan exists and amount matches
-        if (!['pro', 'premium'].includes(planId)) {
+        if (!['pro', 'premium', 'topup'].includes(planId)) {
             return res.status(400).json({ error: 'Invalid plan' });
         }
 
@@ -2014,12 +2042,21 @@ app.post('/api/payment/webhook', express.json(), async (req, res) => {
             if (event.event === 'charge.success') {
                 const { user_id, plan_id } = event.data.metadata;
 
-                // Update User Plan
-                await pool.query(
-                    `UPDATE public.users SET plan = $1, ai_calls_today = 0 WHERE id = $2`,
-                    [plan_id, user_id]
-                );
-                console.log(`✅ Paystack Webhook: Upgraded user ${user_id} to ${plan_id} plan.`);
+                if (plan_id === 'topup') {
+                    // Add 500 Top-up credits
+                    await pool.query(
+                        `UPDATE public.users SET topup_credits = topup_credits + 500 WHERE id = $1`,
+                        [user_id]
+                    );
+                    console.log(`✅ Paystack Webhook: Added 500 Top-Up Credits to user ${user_id}.`);
+                } else {
+                    // Update User Plan
+                    await pool.query(
+                        `UPDATE public.users SET plan = $1, ai_calls_today = 0 WHERE id = $2`,
+                        [plan_id, user_id]
+                    );
+                    console.log(`✅ Paystack Webhook: Upgraded user ${user_id} to ${plan_id} plan.`);
+                }
             }
         }
         res.sendStatus(200);

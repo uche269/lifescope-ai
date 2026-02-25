@@ -85,12 +85,11 @@ const Settings: React.FC = () => {
         }
     };
 
-    const handleUpgrade = async () => {
+    const handlePurchase = async (planId: string, amount: number) => {
         setUpgradeLoading(true);
         try {
             // Amount is in Naira. Adjust based on your pricing. 
-            // 5000 Naira for Premium as an example.
-            const res = await api.post('/payment/initialize', { planId: 'premium', amount: 5000 });
+            const res = await api.post('/payment/initialize', { planId, amount });
             if (res.data.checkoutUrl) {
                 window.location.href = res.data.checkoutUrl; // Redirect to Paystack
             } else {
@@ -169,53 +168,116 @@ const Settings: React.FC = () => {
                                     <p className="text-xs text-slate-500 mb-1">Plan</p>
                                     <p className="text-sm font-semibold text-white capitalize">
                                         {planInfo?.effectivePlan || 'Free'} Plan
-                                        {planInfo?.trialActive && (
-                                            <span className="ml-2 text-xs text-indigo-400">
-                                                ({planInfo.trialDaysLeft}d trial left)
-                                            </span>
-                                        )}
                                     </p>
                                 </div>
                                 <div className="bg-slate-900 rounded-xl p-4">
-                                    <p className="text-xs text-slate-500 mb-1">AI Usage Today</p>
+                                    <div className="flex justify-between items-center mb-1">
+                                        <p className="text-xs text-slate-500">AI Weekly Quota</p>
+                                        {((planInfo as any)?.topupCredits || 0) > 0 && (
+                                            <span className="text-xs font-bold text-emerald-400 font-mono">+{((planInfo as any)?.topupCredits)} Top-up remaining</span>
+                                        )}
+                                    </div>
                                     <div className="flex items-center gap-2">
                                         <div className="flex-1 bg-slate-800 rounded-full h-2">
                                             <div
                                                 className="bg-indigo-500 rounded-full h-2 transition-all"
                                                 style={{
-                                                    width: `${Math.min(100, ((planInfo?.aiCallsLimit || 10) - (planInfo?.aiCallsRemaining || 0)) / (planInfo?.aiCallsLimit || 10) * 100)}%`
+                                                    width: `${Math.min(100, Math.max(0, (planInfo?.aiCallsLimit || 10) - ((planInfo?.aiCallsRemaining || 0) - ((planInfo as any)?.topupCredits || 0))) / (planInfo?.aiCallsLimit || 10) * 100)}%`
                                                 }}
                                             />
                                         </div>
                                         <span className="text-xs text-slate-400">
-                                            {(planInfo?.aiCallsLimit || 10) - (planInfo?.aiCallsRemaining || 0)}/{planInfo?.aiCallsLimit || 10}
+                                            Weekly: {Math.max(0, ((planInfo?.aiCallsRemaining || 0) - ((planInfo as any)?.topupCredits || 0)))}/{planInfo?.aiCallsLimit || 20}
                                         </span>
                                     </div>
                                 </div>
                             </div>
 
-                            {/* Premium Upsell Card */}
-                            {planInfo?.effectivePlan !== 'premium' && (
-                                <div className="bg-gradient-to-r from-indigo-900/40 to-purple-900/40 border border-indigo-500/30 rounded-xl p-5 flex items-start gap-4 mt-4">
-                                    <div className="p-2 bg-indigo-500/20 rounded-lg shrink-0">
-                                        <Sparkles className="w-5 h-5 text-indigo-400" />
+                            {/* --- PLAN COMPARISON TABLE --- */}
+                            <div className="mt-8">
+                                <h4 className="text-white font-bold mb-4">Choose Your Plan</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+
+                                    {/* Free Tier */}
+                                    <div className={`rounded-xl p-5 border ${planInfo?.effectivePlan === 'free' ? 'bg-slate-800/80 border-indigo-500/50 relative' : 'bg-slate-900 border-slate-700'}`}>
+                                        {planInfo?.effectivePlan === 'free' && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">CURRENT</div>}
+                                        <p className="text-sm font-bold text-white">Free</p>
+                                        <p className="text-2xl font-black text-white my-2">₦0<span className="text-xs text-slate-500 font-normal">/mo</span></p>
+                                        <ul className="text-xs text-slate-400 space-y-2 mb-4">
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-400" /> 20 AI Credits / wk</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-400" /> Standard AI Model</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-400" /> Basic Tracking</li>
+                                        </ul>
                                     </div>
-                                    <div className="flex-1">
-                                        <p className="text-sm font-bold text-white mb-1">Upgrade to Premium</p>
-                                        <p className="text-xs text-slate-400 leading-relaxed mb-3">
-                                            Unlock an unlimited context window and access to our most advanced reasoning model (Gemini 2.0 Pro) for deeper financial insights and complex health analyses.
-                                        </p>
-                                        <button
-                                            onClick={handleUpgrade}
-                                            disabled={upgradeLoading}
-                                            className="text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors shadow-lg shadow-indigo-500/20 flex items-center gap-2"
-                                        >
-                                            {upgradeLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
-                                            {upgradeLoading ? 'Processing...' : 'Upgrade Now (₦5,000)'}
-                                        </button>
+
+                                    {/* Premium Tier */}
+                                    <div className={`rounded-xl p-5 border ${planInfo?.effectivePlan === 'premium' ? 'bg-indigo-900/40 border-indigo-400 relative' : 'bg-slate-900 border-slate-700'}`}>
+                                        {planInfo?.effectivePlan === 'premium' && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-indigo-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">CURRENT</div>}
+                                        <div className="flex justify-between items-start">
+                                            <p className="text-sm font-bold text-white">Premium</p>
+                                            <Sparkles className="w-4 h-4 text-indigo-400" />
+                                        </div>
+                                        <p className="text-2xl font-black text-white my-2">₦5,000<span className="text-xs text-slate-500 font-normal">/mo</span></p>
+                                        <ul className="text-xs text-slate-400 space-y-2 mb-4">
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-400" /> 200 AI Credits / wk</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-400" /> Higher Quality Model</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-indigo-400" /> Deep Health Insights</li>
+                                        </ul>
+                                        {planInfo?.effectivePlan !== 'premium' && planInfo?.effectivePlan !== 'pro' && planInfo?.effectivePlan !== 'admin' && (
+                                            <button
+                                                onClick={() => handlePurchase('premium', 5000)}
+                                                disabled={upgradeLoading}
+                                                className="w-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 py-2 rounded-lg transition-colors"
+                                            >
+                                                {upgradeLoading ? 'Processing...' : 'Upgrade Premium'}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Pro Tier */}
+                                    <div className={`rounded-xl p-5 border relative overflow-hidden ${planInfo?.effectivePlan === 'pro' || planInfo?.effectivePlan === 'admin' ? 'bg-purple-900/40 border-purple-400' : 'bg-slate-900 border-slate-700'}`}>
+                                        <div className="absolute top-0 right-0 w-16 h-16 bg-gradient-to-br from-purple-500/20 to-transparent blur-xl" />
+                                        {(planInfo?.effectivePlan === 'pro' || planInfo?.effectivePlan === 'admin') && <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-purple-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">CURRENT</div>}
+                                        <div className="flex justify-between items-start">
+                                            <p className="text-sm font-bold text-white">Pro</p>
+                                            <Sparkles className="w-4 h-4 text-purple-400" />
+                                        </div>
+                                        <p className="text-2xl font-black text-white my-2">₦10,000<span className="text-xs text-slate-500 font-normal">/mo</span></p>
+                                        <ul className="text-xs text-slate-400 space-y-2 mb-4">
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> 2000 AI Credits / wk</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> Latest Reasoning Engine</li>
+                                            <li className="flex items-center gap-2"><CheckCircle2 className="w-3 h-3 text-purple-400" /> Perfect Generated Charts</li>
+                                        </ul>
+                                        {planInfo?.effectivePlan !== 'pro' && planInfo?.effectivePlan !== 'admin' && (
+                                            <button
+                                                onClick={() => handlePurchase('pro', 10000)}
+                                                disabled={upgradeLoading}
+                                                className="w-full text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 py-2 rounded-lg transition-colors"
+                                            >
+                                                {upgradeLoading ? 'Processing...' : 'Upgrade Pro'}
+                                            </button>
+                                        )}
                                     </div>
                                 </div>
-                            )}
+
+                                {/* Topup Card Moved Below */}
+                                <div className="bg-emerald-900/20 border border-emerald-500/30 rounded-xl p-4 flex items-center justify-between gap-4 mt-4">
+                                    <div>
+                                        <p className="text-sm font-bold text-white mb-1">Buy Extra AI Top-Up</p>
+                                        <p className="text-xs text-slate-400">
+                                            Need a quick boost? Get 500 Non-Expiring AI Credits. Only consumed after your weekly limit ends.
+                                        </p>
+                                    </div>
+                                    <button
+                                        onClick={() => handlePurchase('topup', 2000)}
+                                        disabled={upgradeLoading}
+                                        className="shrink-0 text-xs font-bold text-emerald-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors"
+                                    >
+                                        {upgradeLoading ? '...' : 'Buy Pack (₦2,000)'}
+                                    </button>
+                                </div>
+                            </div>
+
 
                             <div className="bg-slate-900/50 rounded-xl p-4 text-xs text-slate-500">
                                 <p>Member since {user?.created_at ? new Date(user.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long' }) : 'recently'}</p>
