@@ -1745,18 +1745,23 @@ app.post('/api/ai/scenario', aiAuth, async (req, res) => {
 
 app.post('/api/ai/chat', aiAuth, async (req, res) => {
     try {
-        const { history, message } = req.body;
+        const { history, message, systemInstructionOverride } = req.body;
         const ai = await getAI(req);
+        const safeHistory = (history || []).map(m => ({
+            role: m.role === 'assistant' ? 'model' : (m.role === 'model' ? 'model' : 'user'),
+            parts: Array.isArray(m.parts) ? m.parts : [{ text: m.text || '' }]
+        }));
         const chat = ai.chats.create({
             model: getModelName(req),
-            history: history,
+            history: safeHistory,
             config: {
-                systemInstruction: "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
+                systemInstruction: systemInstructionOverride || "You are a role-play partner helping the user practice a specific social scenario. Stay in character. Keep responses brief and conversational. Do not use Markdown."
             }
         });
         const result = await chat.sendMessage({ message });
         res.json({ text: result.text });
     } catch (error) {
+        console.error('AI Chat Error:', error);
         res.status(500).json({ error: "I'm having trouble connecting." });
     }
 });
@@ -1976,15 +1981,19 @@ app.post('/api/ai/chat-support', aiAuth, async (req, res) => {
     try {
         const { message, userContext, chatHistory } = req.body;
         const ai = await getAI(req);
-        // formatting and system prompt applied here...
+        const safeHistory = (chatHistory || []).map(m => ({
+            role: m.role === 'assistant' ? 'model' : 'user',
+            parts: [{ text: m.text }]
+        }));
         const chat = ai.chats.create({
             model: getModelName(req),
-            history: chatHistory.map(m => ({ role: m.role, parts: [{ text: m.text }] })),
-            config: { systemInstruction: `You are the LifeScope AI assistant. You help the user manage their goals, finances, health, and documents. If they ask about upgrading, tell them to go to Settings -> Profile and click 'Upgrade Now' to get Premium for ₦5,000. User: ${userContext.userName}` }
+            history: safeHistory,
+            config: { systemInstruction: `You are the LifeScope AI assistant. You help the user manage their goals, finances, health, and documents. If they ask about upgrading, tell them to go to Settings -> Profile and click 'Upgrade Now' to get Premium for ₦5,000. User: ${userContext?.userName || 'User'}` }
         });
         const result = await chat.sendMessage({ message });
         res.json({ text: result.text });
     } catch (error) {
+        console.error('Chat Support Error:', error);
         res.status(500).json({ error: "Chat Support Error" });
     }
 });

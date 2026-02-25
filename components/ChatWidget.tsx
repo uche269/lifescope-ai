@@ -36,7 +36,7 @@ const ChatWidget: React.FC = () => {
 
     const logChat = async (msgs: ChatMessage[]) => {
         try {
-            await fetch(`${API_URL}/api/chat/log`, {
+            await fetch(`${API_URL}/chat/log`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
@@ -110,7 +110,7 @@ const ChatWidget: React.FC = () => {
     const handleEscalate = async () => {
         setEscalated(true);
         try {
-            await fetch(`${API_URL}/api/chat/escalate`, {
+            await fetch(`${API_URL}/chat/escalate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 credentials: 'include',
