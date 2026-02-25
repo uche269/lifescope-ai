@@ -29,7 +29,7 @@ const Settings: React.FC = () => {
     const [deleteInput, setDeleteInput] = useState('');
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [saved, setSaved] = useState(false);
-    const [upgradeLoading, setUpgradeLoading] = useState(false);
+    const [upgradeLoading, setUpgradeLoading] = useState<string | null>(null);
 
     useEffect(() => {
         const savedNotifs = localStorage.getItem('ls_notifications');
@@ -86,7 +86,7 @@ const Settings: React.FC = () => {
     };
 
     const handlePurchase = async (planId: string, amount: number) => {
-        setUpgradeLoading(true);
+        setUpgradeLoading(planId);
         try {
             // Amount is in Naira. Adjust based on your pricing. 
             const res = await api.post('/payment/initialize', { planId, amount });
@@ -99,7 +99,7 @@ const Settings: React.FC = () => {
             console.error(e);
             alert("Checkout Error: " + (e.response?.data?.error || e.message));
         } finally {
-            setUpgradeLoading(false);
+            setUpgradeLoading(null);
         }
     };
 
@@ -226,10 +226,10 @@ const Settings: React.FC = () => {
                                         {planInfo?.effectivePlan !== 'premium' && planInfo?.effectivePlan !== 'pro' && planInfo?.effectivePlan !== 'admin' && (
                                             <button
                                                 onClick={() => handlePurchase('premium', 5000)}
-                                                disabled={upgradeLoading}
+                                                disabled={upgradeLoading !== null}
                                                 className="w-full text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 py-2 rounded-lg transition-colors"
                                             >
-                                                {upgradeLoading ? 'Processing...' : 'Upgrade Premium'}
+                                                {upgradeLoading === 'premium' ? 'Processing...' : 'Upgrade Premium'}
                                             </button>
                                         )}
                                     </div>
@@ -251,10 +251,10 @@ const Settings: React.FC = () => {
                                         {planInfo?.effectivePlan !== 'pro' && planInfo?.effectivePlan !== 'admin' && (
                                             <button
                                                 onClick={() => handlePurchase('pro', 10000)}
-                                                disabled={upgradeLoading}
+                                                disabled={upgradeLoading !== null}
                                                 className="w-full text-xs font-bold text-white bg-purple-600 hover:bg-purple-700 py-2 rounded-lg transition-colors"
                                             >
-                                                {upgradeLoading ? 'Processing...' : 'Upgrade Pro'}
+                                                {upgradeLoading === 'pro' ? 'Processing...' : 'Upgrade Pro'}
                                             </button>
                                         )}
                                     </div>
@@ -270,10 +270,10 @@ const Settings: React.FC = () => {
                                     </div>
                                     <button
                                         onClick={() => handlePurchase('topup', 2000)}
-                                        disabled={upgradeLoading}
+                                        disabled={upgradeLoading !== null}
                                         className="shrink-0 text-xs font-bold text-emerald-950 bg-emerald-400 hover:bg-emerald-300 disabled:opacity-50 px-4 py-2 rounded-lg transition-colors"
                                     >
-                                        {upgradeLoading ? '...' : 'Buy Pack (₦2,000)'}
+                                        {upgradeLoading === 'topup' ? '...' : 'Buy Pack (₦2,000)'}
                                     </button>
                                 </div>
                             </div>
