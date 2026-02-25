@@ -21,7 +21,8 @@ export const api = {
     },
 
     post: async (tableOrEndpoint: string, data: any, options?: RequestInit) => {
-        const url = tableOrEndpoint.startsWith('/') ? tableOrEndpoint : `${API_BASE}/${tableOrEndpoint}`;
+        // If it's an absolute path, we need to ensure it hits the backend '/api' route scope
+        const url = tableOrEndpoint.startsWith('/') ? `/api${tableOrEndpoint}` : `${API_BASE}/${tableOrEndpoint}`;
         const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...options?.headers },
