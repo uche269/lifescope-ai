@@ -1671,14 +1671,15 @@ app.post('/api/chat/escalate', ensureAuth, async (req, res) => {
 // ============================
 
 // Helper locally
-const getAI = (req) => {
+const getAI = async (req) => {
+    const { GoogleGenAI } = await import('@google/genai');
     // If user passed a key from front-end localStorage, use it. Else use server ENV
     const apiKey = req.headers['x-gemini-key'] || process.env.GEMINI_API_KEY;
     return new GoogleGenAI({ apiKey });
 };
 
 const getModelName = (req) => {
-    if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'gemini-2.5-pro';
+    if (req.userPlan === 'admin' || req.userPlan === 'pro') return 'gemini-3.1-pro';
     if (req.userPlan === 'premium') return 'gemini-2.5-pro';
     return 'gemini-2.5-flash';
 };
@@ -1697,7 +1698,7 @@ Always end responses by asking "What do you want to add, review, or improve toda
 app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
     try {
         const { goalTitle, currentStatus } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `
             I have a goal: "${goalTitle}". 
             Current status: ${currentStatus}.
@@ -1720,7 +1721,7 @@ app.post('/api/ai/recommendation', aiAuth, async (req, res) => {
 app.post('/api/ai/scenario', aiAuth, async (req, res) => {
     try {
         const { scenario, level } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `
             Scenario: ${scenario}
             Level: ${level}
@@ -1744,7 +1745,7 @@ app.post('/api/ai/scenario', aiAuth, async (req, res) => {
 app.post('/api/ai/chat', aiAuth, async (req, res) => {
     try {
         const { history, message } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const chat = ai.chats.create({
             model: getModelName(req),
             history: history,
@@ -1762,7 +1763,7 @@ app.post('/api/ai/chat', aiAuth, async (req, res) => {
 app.post('/api/ai/voice', aiAuth, async (req, res) => {
     try {
         const { audioBase64 } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: {
@@ -1781,7 +1782,7 @@ app.post('/api/ai/voice', aiAuth, async (req, res) => {
 app.post('/api/ai/briefing', aiAuth, async (req, res) => {
     try {
         const { topic } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         let prompt = "";
 
         if (topic === 'Sports') {
@@ -1809,7 +1810,7 @@ app.post('/api/ai/briefing', aiAuth, async (req, res) => {
 app.post('/api/ai/document', aiAuth, async (req, res) => {
     try {
         const { base64Data, mimeType } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const response = await ai.models.generateContent({
             model: getModelName(req),
             contents: {
@@ -1829,7 +1830,7 @@ app.post('/api/ai/document', aiAuth, async (req, res) => {
 app.post('/api/ai/url', aiAuth, async (req, res) => {
     try {
         const { url } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `Access and analyze the content of this website: ${url}\nProvide a comprehensive summary of the page's content...`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1845,7 +1846,7 @@ app.post('/api/ai/url', aiAuth, async (req, res) => {
 app.post('/api/ai/annual-report', aiAuth, async (req, res) => {
     try {
         const { userData } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `You are a Senior Strategic Life Coach... USER DATA: ${JSON.stringify(userData)}`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1861,7 +1862,7 @@ app.post('/api/ai/annual-report', aiAuth, async (req, res) => {
 app.post('/api/ai/food-image', aiAuth, async (req, res) => {
     try {
         const { base64Image } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `Analyze the food in this image carefully... Return ONLY a JSON object...`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1885,7 +1886,7 @@ app.post('/api/ai/food-image', aiAuth, async (req, res) => {
 app.post('/api/ai/meal-plan', aiAuth, async (req, res) => {
     try {
         const { preferences } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `Create a detailed ${preferences.duration || '7'}-day meal plan... Goal: ${preferences.goal}...`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1901,7 +1902,7 @@ app.post('/api/ai/meal-plan', aiAuth, async (req, res) => {
 app.post('/api/ai/improve-diet', aiAuth, async (req, res) => {
     try {
         const { currentPlan, goal, userComments } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `I have this meal plan: """${currentPlan}"""\nMy goal is: ${goal}...\nReturn ONLY a JSON object...`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1919,7 +1920,7 @@ app.post('/api/ai/improve-diet', aiAuth, async (req, res) => {
 app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
     try {
         const { prompt, documentText, format, templateText } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const systemPrompt = `You are a professional report generation AI. ${documentText ? `REFERENCE DOCUMENT: ${documentText.slice(0, 30000)}` : ''} ...`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1934,7 +1935,7 @@ app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
 app.post('/api/ai/health-parse', aiAuth, async (req, res) => {
     try {
         const { base64Image, mimeType } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `You are an expert medical data extractor. Read the following health/lab report image carefully... Return ONLY a JSON array...`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1957,7 +1958,7 @@ app.post('/api/ai/health-parse', aiAuth, async (req, res) => {
 app.post('/api/ai/health-interpret', aiAuth, async (req, res) => {
     try {
         const { testData } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         const prompt = `Interpret these medical test results in plain language: Test Type: ${testData.testType} Results: ${JSON.stringify(testData.results)}....`;
         const response = await ai.models.generateContent({
             model: getModelName(req),
@@ -1973,7 +1974,7 @@ app.post('/api/ai/health-interpret', aiAuth, async (req, res) => {
 app.post('/api/ai/chat-support', aiAuth, async (req, res) => {
     try {
         const { message, userContext, chatHistory } = req.body;
-        const ai = getAI(req);
+        const ai = await getAI(req);
         // formatting and system prompt applied here...
         const chat = ai.chats.create({
             model: getModelName(req),

@@ -414,7 +414,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
           Getting Started with Goals
         </h3>
         <p className="text-slate-300 text-sm max-w-3xl mb-4">
-          To get the most out of LifeScope, start by creating **Categories** for your life areas (e.g., "Health", "Career", "Finance").
+          To get the most out of LifeScope, start by creating Categories for your life areas (e.g., "Health", "Career", "Finance").
           Then add specific Projects or Goals within those categories. Break them down into small, actionable Activities to track your progress!
         </p>
         <div className="flex gap-2 text-xs text-indigo-300/80">
