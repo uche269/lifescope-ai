@@ -26,32 +26,6 @@ const NotificationBanner: React.FC<NotificationBannerProps> = ({ goals }) => {
         const sessionDismissed = JSON.parse(sessionStorage.getItem('dismissed_notifications') || '[]');
         setDismissed(sessionDismissed);
 
-        // Trial expiry warning (2 days or less)
-        if (planInfo?.trialActive && planInfo.trialDaysLeft <= 2) {
-            notifs.push({
-                id: 'trial_expiry',
-                type: 'trial',
-                message: planInfo.trialDaysLeft <= 0
-                    ? 'Your free trial has ended. Upgrade to Pro to keep using AI features.'
-                    : `Your free trial ends in ${planInfo.trialDaysLeft} day${planInfo.trialDaysLeft === 1 ? '' : 's'}. Upgrade to keep AI features.`,
-                icon: <CreditCard className="w-4 h-4" />,
-                color: planInfo.trialDaysLeft <= 0 ? 'border-red-500/50 bg-red-500/10' : 'border-amber-500/50 bg-amber-500/10',
-                action: { label: 'Upgrade Now', href: '/settings' }
-            });
-        }
-
-        // Trial ended, not paid
-        if (!planInfo?.trialActive && planInfo?.effectivePlan === 'free') {
-            notifs.push({
-                id: 'trial_ended',
-                type: 'trial',
-                message: 'Your free trial has ended. Upgrade to Pro to access AI features.',
-                icon: <AlertTriangle className="w-4 h-4" />,
-                color: 'border-red-500/50 bg-red-500/10',
-                action: { label: 'Upgrade to Pro', href: '/settings' }
-            });
-        }
-
         // Goal deadline approaching (3 days)
         const now = new Date();
         goals.forEach(goal => {

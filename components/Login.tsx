@@ -346,7 +346,7 @@ const Login: React.FC = () => {
 
                 <div className="flex items-center justify-center gap-2 text-xs text-slate-500 mt-6">
                     <Lock className="w-3 h-3" />
-                    <span>Secure Encryption · Free 7-day trial</span>
+                    <span>Secure Encryption &middot; Free Weekly AI Credits</span>
                 </div>
             </div>
         </div>

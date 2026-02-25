@@ -56,7 +56,7 @@ const DocumentTools: React.FC = () => {
     // Merge State
     const [mergeFiles, setMergeFiles] = useState<File[]>([]);
 
-    const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free';
+    const isAILocked = false;
     const containerRef = useRef<HTMLDivElement>(null);
 
     // Chat State

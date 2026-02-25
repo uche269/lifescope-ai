@@ -56,7 +56,7 @@ const FinanceManager: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'overview' | 'transactions' | 'budget'>('overview');
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free';
+    const isAILocked = false;
 
     // Fetch transactions
     const fetchTransactions = useCallback(async () => {

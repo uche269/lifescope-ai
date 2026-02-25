@@ -32,7 +32,7 @@ const Health: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'metrics' | 'food' | 'plan' | 'consultant'>('metrics');
     const [loading, setLoading] = useState(false);
     // Admins and premium users have full AI access
-    const isAILocked = !planInfo?.trialActive && planInfo?.effectivePlan === 'free' && !user?.is_admin;
+    const isAILocked = false;
 
     // Health Disclaimer
     const [showDisclaimer, setShowDisclaimer] = useState(() => {
