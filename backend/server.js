@@ -2525,23 +2525,6 @@ app.get('/api/health/test-results', ensureAuth, async (req, res) => {
     }
 });
 
-// Serve Static Frontend directly (Production Mode)
-
-if (process.env.NODE_ENV === 'production') {
-    // Serve frontend files with cache headers
-    app.use(express.static(path.join(__dirname, '../dist'), {
-        maxAge: '1y',
-        etag: false
-    }));
-
-    app.get('*', (req, res) => {
-        // Don't intercept API routes — let them fall through to handlers registered below
-        if (req.path.startsWith('/api/')) {
-            return res.status(404).json({ error: 'API route not found' });
-        }
-        res.sendFile(path.join(__dirname, '../dist/index.html'));
-    });
-}
 
 // ============================
 // AUTOMATED MONTHLY EMAILS
@@ -2770,6 +2753,20 @@ app.post('/api/email/trigger-monthly', ensureAuth, ensureAdmin, async (req, res)
     }
 });
 
+
+
+// Serve Static Frontend directly (Production Mode)
+// IMPORTANT: This MUST be the last route registered, after all /api/* routes
+if (process.env.NODE_ENV === 'production') {
+    app.use(express.static(path.join(__dirname, '../dist'), {
+        maxAge: '1y',
+        etag: false
+    }));
+
+    app.get('*', (req, res) => {
+        res.sendFile(path.join(__dirname, '../dist/index.html'));
+    });
+}
 
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT} `);
