@@ -50,16 +50,26 @@ const AdminDashboard: React.FC = () => {
     const [activeTab, setActiveTab] = useState<'users' | 'tickets'>('users');
     const [triggerLoading, setTriggerLoading] = useState(false);
     const [triggerMsg, setTriggerMsg] = useState('');
+    const [error, setError] = useState('');
 
     const isAdmin = planInfo?.is_admin || planInfo?.effectivePlan === 'admin';
 
     const fetchData = async () => {
         setLoading(true);
+        setError('');
         try {
+            const fetchJson = async (url: string) => {
+                const res = await fetch(url, { credentials: 'include' });
+                if (!res.ok) {
+                    const text = await res.text();
+                    throw new Error(`${url} returned ${res.status}: ${text}`);
+                }
+                return res.json();
+            };
             const [statsRes, usersRes, ticketsRes] = await Promise.all([
-                fetch('/api/admin/stats', { credentials: 'include' }).then(r => r.json()),
-                fetch('/api/admin/users', { credentials: 'include' }).then(r => r.json()),
-                fetch('/api/support/tickets', { credentials: 'include' }).then(r => r.json()),
+                fetchJson('/api/admin/stats'),
+                fetchJson('/api/admin/users'),
+                fetchJson('/api/support/tickets'),
             ]);
             setStats(statsRes.data || statsRes);
             const usersData = usersRes.data || usersRes;
@@ -68,6 +78,7 @@ const AdminDashboard: React.FC = () => {
             setTickets(Array.isArray(ticketsData) ? ticketsData : []);
         } catch (err: any) {
             console.error('Admin data fetch error:', err);
+            setError(err.message || 'Failed to load admin data');
         } finally {
             setLoading(false);
         }
@@ -161,6 +172,12 @@ const AdminDashboard: React.FC = () => {
                     </h2>
                     <p className="text-slate-400 text-sm">Monitor your platform, users, and feedback.</p>
                 </div>
+                {error && (
+                    <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-3 text-sm text-red-400 max-w-lg">
+                        <p className="font-semibold">Error loading data:</p>
+                        <p className="text-xs mt-1 break-all">{error}</p>
+                    </div>
+                )}
                 <button
                     onClick={fetchData}
                     disabled={loading}
