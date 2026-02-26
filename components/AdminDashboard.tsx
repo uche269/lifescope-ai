@@ -57,13 +57,15 @@ const AdminDashboard: React.FC = () => {
         setLoading(true);
         try {
             const [statsRes, usersRes, ticketsRes] = await Promise.all([
-                api.get('/admin/stats'),
-                api.get('/admin/users'),
-                api.get('/support/tickets'),
+                fetch('/api/admin/stats', { credentials: 'include' }).then(r => r.json()),
+                fetch('/api/admin/users', { credentials: 'include' }).then(r => r.json()),
+                fetch('/api/support/tickets', { credentials: 'include' }).then(r => r.json()),
             ]);
             setStats(statsRes.data || statsRes);
-            setUsers(Array.isArray(usersRes.data) ? usersRes.data : (Array.isArray(usersRes) ? usersRes : []));
-            setTickets(Array.isArray(ticketsRes.data) ? ticketsRes.data : (Array.isArray(ticketsRes) ? ticketsRes : []));
+            const usersData = usersRes.data || usersRes;
+            setUsers(Array.isArray(usersData) ? usersData : []);
+            const ticketsData = ticketsRes.data || ticketsRes;
+            setTickets(Array.isArray(ticketsData) ? ticketsData : []);
         } catch (err: any) {
             console.error('Admin data fetch error:', err);
         } finally {
@@ -196,8 +198,8 @@ const AdminDashboard: React.FC = () => {
                 <button
                     onClick={() => setActiveTab('users')}
                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === 'users'
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800'
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800'
                         }`}
                 >
                     <Users className="w-4 h-4" /> Users ({users.length})
@@ -205,8 +207,8 @@ const AdminDashboard: React.FC = () => {
                 <button
                     onClick={() => setActiveTab('tickets')}
                     className={`flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium transition-all ${activeTab === 'tickets'
-                            ? 'bg-indigo-600 text-white'
-                            : 'text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800'
+                        ? 'bg-indigo-600 text-white'
+                        : 'text-slate-400 hover:text-white bg-slate-800/50 hover:bg-slate-800'
                         }`}
                 >
                     <MessageSquare className="w-4 h-4" /> Tickets ({tickets.length})
@@ -341,14 +343,14 @@ const AdminDashboard: React.FC = () => {
                                             <div className="min-w-0">
                                                 <div className="flex items-center gap-2 flex-wrap mb-1">
                                                     <span className={`text-xs font-semibold px-2 py-0.5 rounded-full border capitalize ${ticket.type === 'complaint'
-                                                            ? 'bg-red-500/10 text-red-400 border-red-500/30'
-                                                            : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                                        ? 'bg-red-500/10 text-red-400 border-red-500/30'
+                                                        : 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
                                                         }`}>
                                                         {ticket.type}
                                                     </span>
                                                     <span className={`text-xs px-2 py-0.5 rounded-full border ${ticket.status === 'emailed'
-                                                            ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
-                                                            : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                                                        ? 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                                                        : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
                                                         }`}>
                                                         {ticket.status}
                                                     </span>
