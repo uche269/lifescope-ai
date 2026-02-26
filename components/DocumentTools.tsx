@@ -356,9 +356,11 @@ const DocumentTools: React.FC = () => {
             const slidesRaw = reportContent.split('---SLIDE---').filter(s => s.trim().length > 0);
             const parsedSlides = slidesRaw.length > 0 ? slidesRaw.map(slideText => {
                 const titleMatch = slideText.match(/Title:\s*(.*)/i);
+                const subtitleMatch = slideText.match(/Subtitle:\s*(.*)/i);
                 const layoutMatch = slideText.match(/Layout:\s*(.*)/i);
 
                 const title = titleMatch ? titleMatch[1].replace(/[*#_`~]/g, '').trim() : 'Slide';
+                const subtitle = subtitleMatch ? subtitleMatch[1].replace(/[*#_`~]/g, '').trim() : '';
                 const layout = layoutMatch ? layoutMatch[1].toLowerCase().trim() : 'full';
                 const isSplit = layout.includes('split');
 
@@ -374,13 +376,14 @@ const DocumentTools: React.FC = () => {
                 const contentMatch = contentRaw.match(/Content:([\s\S]*)/i);
                 const content = contentMatch ? contentMatch[1].replace(/[*#_`~]/g, '').trim() : contentRaw.replace(/[*#_`~]/g, '').trim();
 
+                // Parse charts on ANY slide (not just split)
                 let chartDef: any = null;
-                if (chartRaw.length > 0 && isSplit) {
+                if (chartRaw.length > 0) {
                     const typeMatch = chartRaw.match(/Type:\s*(.*)/i);
                     const labelsMatch = chartRaw.match(/Labels:\s*(.*)/i);
                     const valuesMatch = chartRaw.match(/Values:\s*(.*)/i);
                     if (typeMatch && labelsMatch && valuesMatch) {
-                        const labels = labelsMatch[1].split(',').map(l => l.trim().replace(/[*#_`~]/g, ''));
+                        const labels = labelsMatch[1].split(',').map(l => l.trim().replace(/[*#_`~\[\]]/g, ''));
                         const valuesStr = valuesMatch[1].split(',').map(v => v.trim().replace(/[^0-9.-]/g, ''));
                         const values = valuesStr.map(v => parseFloat(v) || 0);
                         const minLen = Math.min(labels.length, values.length);
@@ -391,91 +394,181 @@ const DocumentTools: React.FC = () => {
                         };
                     }
                 }
-                return { title, isSplit, content, chartDef };
-            }) : [{ title: 'AI Report', isSplit: false, content: reportContent.replace(/[*#_`~]/g, ''), chartDef: null }];
+                return { title, subtitle, isSplit, content, chartDef };
+            }) : [{ title: 'AI Report', subtitle: '', isSplit: false, content: reportContent.replace(/[*#_`~]/g, ''), chartDef: null }];
+
+            // Helper to fetch QuickChart image as base64
+            const fetchChartImage = async (chartDef: any, width = 600, height = 350): Promise<string | null> => {
+                try {
+                    const cType = chartDef.type.includes('pie') ? 'pie' : (chartDef.type.includes('line') ? 'line' : 'bar');
+                    const colors = ['#4F46E5', '#7C3AED', '#2563EB', '#0891B2', '#059669', '#D97706', '#DC2626', '#DB2777'];
+                    const chartConfig = {
+                        type: cType,
+                        data: {
+                            labels: chartDef.labels,
+                            datasets: [{
+                                label: 'Data',
+                                data: chartDef.values,
+                                backgroundColor: cType === 'pie'
+                                    ? chartDef.values.map((_: any, i: number) => colors[i % colors.length])
+                                    : colors[0] + 'CC',
+                                borderColor: cType === 'pie' ? '#ffffff' : colors[0],
+                                borderWidth: cType === 'pie' ? 2 : 2,
+                                fill: cType === 'line' ? false : undefined
+                            }]
+                        },
+                        options: {
+                            plugins: { legend: { display: cType === 'pie' } },
+                            scales: cType !== 'pie' ? { y: { beginAtZero: true } } : undefined
+                        }
+                    };
+                    const qs = encodeURIComponent(JSON.stringify(chartConfig));
+                    const imgUrl = `https://quickchart.io/chart?c=${qs}&width=${width}&height=${height}&backgroundColor=white`;
+                    const imgRes = await fetch(imgUrl);
+                    const imgBlob = await imgRes.blob();
+                    return await new Promise<string>((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result as string);
+                        reader.readAsDataURL(imgBlob);
+                    });
+                } catch (e) {
+                    console.error("Failed to fetch chart image", e);
+                    return null;
+                }
+            };
 
             // Generate formats
             if (reportFormat === 'pdf') {
                 const { jsPDF } = await import('jspdf');
                 const doc = new jsPDF();
+                const pageW = doc.internal.pageSize.getWidth();
 
-                let y = 20;
-                for (const slide of parsedSlides) {
-                    // Check if we need a new page for the slide title
-                    if (y > 270) { doc.addPage(); y = 20; }
+                // --- Title Page ---
+                doc.setFillColor(30, 27, 75); // Deep indigo
+                doc.rect(0, 0, pageW, 80, 'F');
+                doc.setFillColor(79, 70, 229); // Lighter indigo accent
+                doc.rect(0, 75, pageW, 5, 'F');
 
+                doc.setTextColor(255, 255, 255);
+                doc.setFontSize(28);
+                doc.setFont('helvetica', 'bold');
+                const titleLines = doc.splitTextToSize(parsedSlides[0]?.title || 'AI Report', pageW - 40);
+                doc.text(titleLines, 20, 35);
+
+                if (parsedSlides[0]?.subtitle) {
+                    doc.setFontSize(14);
+                    doc.setFont('helvetica', 'normal');
+                    doc.text(parsedSlides[0].subtitle, 20, 55);
+                }
+
+                doc.setFontSize(11);
+                doc.text(`Generated by LifeScope AI  •  ${new Date().toLocaleDateString()}`, 20, 68);
+
+                // Reset for body
+                doc.setTextColor(30, 30, 30);
+                let y = 100;
+
+                for (let si = 1; si < parsedSlides.length; si++) {
+                    const slide = parsedSlides[si];
+                    if (y > 250) { doc.addPage(); y = 20; }
+
+                    // Section header with accent bar
+                    doc.setFillColor(79, 70, 229);
+                    doc.rect(15, y - 5, 3, 10, 'F');
                     doc.setFontSize(16);
                     doc.setFont('helvetica', 'bold');
-                    doc.text(slide.title, 15, y);
-                    y += 10;
+                    doc.setTextColor(30, 27, 75);
+                    doc.text(slide.title, 22, y + 2);
+                    y += 12;
 
-                    doc.setFontSize(12);
+                    if (slide.subtitle) {
+                        doc.setFontSize(11);
+                        doc.setFont('helvetica', 'italic');
+                        doc.setTextColor(100, 100, 100);
+                        doc.text(slide.subtitle, 22, y);
+                        y += 8;
+                    }
+
+                    doc.setFontSize(11);
                     doc.setFont('helvetica', 'normal');
-                    const splitText = doc.splitTextToSize(slide.content, 180);
+                    doc.setTextColor(50, 50, 50);
+                    const splitText = doc.splitTextToSize(slide.content, 170);
 
                     for (let i = 0; i < splitText.length; i++) {
-                        if (y > 280) { doc.addPage(); y = 20; }
-                        doc.text(splitText[i], 15, y);
-                        y += 7;
+                        if (y > 275) { doc.addPage(); y = 20; }
+                        doc.text(splitText[i], 20, y);
+                        y += 6;
                     }
 
-                    y += 5;
+                    y += 4;
 
-                    // Render QuickChart Image into PDF
+                    // Render chart image
                     if (slide.chartDef) {
-                        try {
-                            const cType = slide.chartDef.type.includes('pie') ? 'pie' : (slide.chartDef.type.includes('line') ? 'line' : 'bar');
-                            const chartConfig = {
-                                type: cType,
-                                data: { labels: slide.chartDef.labels, datasets: [{ label: 'Data', data: slide.chartDef.values }] }
-                            };
-                            const qs = encodeURIComponent(JSON.stringify(chartConfig));
-                            const imgUrl = `https://quickchart.io/chart?c=${qs}&width=500&height=300`;
-
-                            const imgRes = await fetch(imgUrl);
-                            const imgBlob = await imgRes.blob();
-                            const base64 = await new Promise<string>((resolve) => {
-                                const reader = new FileReader();
-                                reader.onload = () => resolve(reader.result as string);
-                                reader.readAsDataURL(imgBlob);
-                            });
-
-                            // Check available space for a chart (approx 80 chars height)
-                            if (y > 200) { doc.addPage(); y = 20; }
-
-                            doc.addImage(base64, 'PNG', 15, y, 160, 96);
-                            y += 105;
-                        } catch (e) {
-                            console.error("Failed to fetch PDF chart image", e);
+                        const chartBase64 = await fetchChartImage(slide.chartDef, 600, 350);
+                        if (chartBase64) {
+                            if (y > 190) { doc.addPage(); y = 20; }
+                            doc.addImage(chartBase64, 'PNG', 20, y, 155, 90);
+                            y += 100;
                         }
                     }
+
+                    y += 6;
                 }
 
                 doc.save('AI_Report.pdf');
             } else if (reportFormat === 'docx') {
-                const { Document, Packer, Paragraph, TextRun, HeadingLevel } = await import('docx');
+                const { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType, BorderStyle } = await import('docx');
                 const childrenElements: any[] = [];
 
-                for (const slide of parsedSlides) {
+                for (let si = 0; si < parsedSlides.length; si++) {
+                    const slide = parsedSlides[si];
+
+                    // Section heading
                     childrenElements.push(new Paragraph({
                         text: slide.title,
-                        heading: HeadingLevel.HEADING_1,
+                        heading: si === 0 ? HeadingLevel.TITLE : HeadingLevel.HEADING_1,
+                        spacing: { before: si === 0 ? 0 : 400, after: 120 },
+                        border: si > 0 ? {
+                            bottom: { style: BorderStyle.SINGLE, size: 6, color: '4F46E5' }
+                        } : undefined,
                     }));
 
-                    slide.content.split('\n').forEach(line => {
+                    if (slide.subtitle) {
                         childrenElements.push(new Paragraph({
-                            children: [new TextRun(line)]
+                            children: [new TextRun({ text: slide.subtitle, italics: true, color: '6B7280', size: 22 })],
+                            spacing: { after: 200 }
+                        }));
+                    }
+
+                    slide.content.split('\n').forEach(line => {
+                        const trimmed = line.trim();
+                        if (!trimmed) return;
+                        const isBullet = trimmed.startsWith('-') || trimmed.startsWith('•');
+                        childrenElements.push(new Paragraph({
+                            children: [new TextRun({
+                                text: isBullet ? trimmed.substring(1).trim() : trimmed,
+                                size: 22,
+                            })],
+                            spacing: { after: 80 },
+                            indent: isBullet ? { left: 360 } : undefined,
+                            bullet: isBullet ? { level: 0 } : undefined,
                         }));
                     });
 
                     if (slide.chartDef) {
                         childrenElements.push(new Paragraph({
-                            children: [new TextRun({ text: `[Chart Data Reference: ${slide.chartDef.labels.join(', ')} -> ${slide.chartDef.values.join(', ')}]`, italics: true })]
+                            children: [new TextRun({ text: `📊 Chart: ${slide.chartDef.labels.join(', ')} → ${slide.chartDef.values.join(', ')}`, italics: true, color: '4F46E5', size: 20 })],
+                            spacing: { before: 200, after: 200 }
                         }));
                     }
                 }
 
-                const doc = new Document({ sections: [{ properties: {}, children: childrenElements }] });
+                const doc = new Document({
+                    sections: [{
+                        properties: {},
+                        children: childrenElements
+                    }]
+                });
                 const blob = await Packer.toBlob(doc);
                 const url = URL.createObjectURL(blob);
                 const link = document.createElement('a');
@@ -485,7 +578,6 @@ const DocumentTools: React.FC = () => {
                 URL.revokeObjectURL(url);
             } else if (reportFormat === 'xlsx') {
                 const XLSX = await import('xlsx');
-                // Extremely basic CSV parse for generic reports
                 const rows = reportContent.split('\n').map(r => r.split('|').map(c => c.trim().replace(/[*#_`~]/g, '')));
                 const ws = XLSX.utils.aoa_to_sheet(rows);
                 const wb = XLSX.utils.book_new();
@@ -494,21 +586,236 @@ const DocumentTools: React.FC = () => {
             } else if (reportFormat === 'pptx') {
                 const PPTXGenJS = (await import('pptxgenjs')).default;
                 const pptx = new PPTXGenJS();
+                pptx.layout = 'LAYOUT_WIDE'; // 13.33 x 7.5 inches
 
-                for (const slide of parsedSlides) {
+                // Color palette
+                const COLORS = {
+                    navy: '1E1B4B',
+                    indigo: '4F46E5',
+                    indigoLight: '818CF8',
+                    indigoFaint: 'EEF2FF',
+                    white: 'FFFFFF',
+                    darkText: '1E293B',
+                    bodyText: '475569',
+                    lightGray: 'F1F5F9',
+                    accent1: '7C3AED',
+                    accent2: '2563EB',
+                    accent3: '0891B2',
+                    accent4: '059669',
+                };
+
+                // Slide color rotation for variety
+                const slideAccents = [COLORS.indigo, COLORS.accent1, COLORS.accent2, COLORS.accent3, COLORS.accent4];
+
+                for (let si = 0; si < parsedSlides.length; si++) {
+                    const slide = parsedSlides[si];
                     const pptxSlide = pptx.addSlide();
-                    pptxSlide.addText(slide.title, { x: 0.5, y: 0.5, w: '90%', fontSize: 24, bold: true, color: '363636' });
+                    const accent = slideAccents[si % slideAccents.length];
+                    const isFirstSlide = si === 0;
+                    const isLastSlide = si === parsedSlides.length - 1;
 
-                    const textWidth = slide.isSplit && slide.chartDef ? '45%' : '90%';
-                    pptxSlide.addText(slide.content, { x: 0.5, y: 1.5, w: textWidth, h: '75%', fontSize: 14, color: '666666', valign: 'top' });
+                    if (isFirstSlide) {
+                        // ===== TITLE SLIDE =====
+                        pptxSlide.background = { fill: COLORS.navy };
 
-                    if (slide.chartDef && slide.isSplit) {
-                        const chartData = [{ name: "Data", labels: slide.chartDef.labels, values: slide.chartDef.values }];
-                        let pptxChartType = pptx.ChartType.bar;
-                        if (slide.chartDef.type.includes('line')) pptxChartType = pptx.ChartType.line;
-                        if (slide.chartDef.type.includes('pie')) pptxChartType = pptx.ChartType.pie;
+                        // Accent bar at bottom
+                        pptxSlide.addShape(pptx.ShapeType.rect, {
+                            x: 0, y: 6.8, w: 13.33, h: 0.7,
+                            fill: { color: COLORS.indigo }
+                        });
 
-                        pptxSlide.addChart(pptxChartType, chartData, { x: 5.5, y: 1.5, w: 4.0, h: 3.5 });
+                        // Decorative circle
+                        pptxSlide.addShape(pptx.ShapeType.ellipse, {
+                            x: 10.5, y: 1.0, w: 3.0, h: 3.0,
+                            fill: { color: COLORS.indigo, transparency: 80 }
+                        });
+
+                        pptxSlide.addText(slide.title, {
+                            x: 0.8, y: 1.5, w: 9.5, h: 2.0,
+                            fontSize: 36, fontFace: 'Arial',
+                            bold: true, color: COLORS.white,
+                            valign: 'middle'
+                        });
+
+                        if (slide.subtitle) {
+                            pptxSlide.addText(slide.subtitle, {
+                                x: 0.8, y: 3.5, w: 9.5, h: 0.8,
+                                fontSize: 18, fontFace: 'Arial',
+                                color: COLORS.indigoLight, italic: true,
+                                valign: 'top'
+                            });
+                        }
+
+                        pptxSlide.addText(`Generated by LifeScope AI  •  ${new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}`, {
+                            x: 0.8, y: 7.0, w: 6, h: 0.4,
+                            fontSize: 11, fontFace: 'Arial',
+                            color: COLORS.white, transparency: 30
+                        });
+
+                    } else if (isLastSlide && !slide.chartDef) {
+                        // ===== CLOSING / SUMMARY SLIDE =====
+                        pptxSlide.background = { fill: COLORS.navy };
+
+                        pptxSlide.addShape(pptx.ShapeType.rect, {
+                            x: 0, y: 0, w: 13.33, h: 0.15,
+                            fill: { color: COLORS.indigo }
+                        });
+
+                        pptxSlide.addText(slide.title, {
+                            x: 0.8, y: 0.8, w: 11.5, h: 1.0,
+                            fontSize: 30, fontFace: 'Arial',
+                            bold: true, color: COLORS.white
+                        });
+
+                        // Format content as bullet points
+                        const closingLines = slide.content.split('\n').filter(l => l.trim());
+                        const closingBullets = closingLines.map(line => ({
+                            text: line.replace(/^[-•*]\s*/, ''),
+                            options: { fontSize: 16, fontFace: 'Arial', color: COLORS.indigoLight, bullet: { code: '2022' }, paraSpaceBefore: 8 }
+                        }));
+                        pptxSlide.addText(closingBullets.length > 0 ? closingBullets : [{ text: slide.content, options: { fontSize: 16, fontFace: 'Arial', color: COLORS.indigoLight } }], {
+                            x: 0.8, y: 2.0, w: 11.5, h: 4.5, valign: 'top'
+                        });
+
+                        pptxSlide.addText('Thank You', {
+                            x: 0.8, y: 6.5, w: 11.5, h: 0.6,
+                            fontSize: 20, fontFace: 'Arial',
+                            color: COLORS.indigo, bold: true
+                        });
+
+                    } else {
+                        // ===== CONTENT SLIDE =====
+                        pptxSlide.background = { fill: COLORS.white };
+
+                        // Top accent bar
+                        pptxSlide.addShape(pptx.ShapeType.rect, {
+                            x: 0, y: 0, w: 13.33, h: 1.2,
+                            fill: { color: accent }
+                        });
+
+                        // Title on accent bar
+                        pptxSlide.addText(slide.title, {
+                            x: 0.6, y: 0.15, w: 12.0, h: 0.7,
+                            fontSize: 22, fontFace: 'Arial',
+                            bold: true, color: COLORS.white
+                        });
+
+                        // Subtitle under bar
+                        if (slide.subtitle) {
+                            pptxSlide.addText(slide.subtitle, {
+                                x: 0.6, y: 0.75, w: 12.0, h: 0.4,
+                                fontSize: 12, fontFace: 'Arial',
+                                italic: true, color: COLORS.white, transparency: 20
+                            });
+                        }
+
+                        // Bottom decoration
+                        pptxSlide.addShape(pptx.ShapeType.rect, {
+                            x: 0, y: 7.3, w: 13.33, h: 0.2,
+                            fill: { color: accent, transparency: 60 }
+                        });
+
+                        // Content area
+                        if (slide.chartDef) {
+                            // --- Slide WITH chart ---
+                            const hasSubstantialContent = slide.content.length > 50;
+
+                            if (hasSubstantialContent && slide.isSplit) {
+                                // Split layout: text left, chart right
+                                const contentLines = slide.content.split('\n').filter(l => l.trim());
+                                const textObjects = contentLines.map(line => {
+                                    const isBullet = line.trim().startsWith('-') || line.trim().startsWith('•');
+                                    return {
+                                        text: isBullet ? line.replace(/^[-•*]\s*/, '').trim() : line.trim(),
+                                        options: {
+                                            fontSize: 13, fontFace: 'Arial', color: COLORS.bodyText,
+                                            bullet: isBullet ? { code: '2022' } : undefined,
+                                            paraSpaceBefore: 4,
+                                            breakType: 'none' as const
+                                        }
+                                    };
+                                });
+
+                                pptxSlide.addText(textObjects, {
+                                    x: 0.6, y: 1.4, w: 5.5, h: 5.5, valign: 'top'
+                                });
+
+                                // Chart on right side (as image from QuickChart)
+                                try {
+                                    const chartBase64 = await fetchChartImage(slide.chartDef, 700, 450);
+                                    if (chartBase64) {
+                                        pptxSlide.addImage({
+                                            data: chartBase64,
+                                            x: 6.5, y: 1.6, w: 6.3, h: 4.2,
+                                            rounding: true
+                                        });
+                                    }
+                                } catch (e) {
+                                    // Fallback to native chart
+                                    const chartData = [{ name: "Data", labels: slide.chartDef.labels, values: slide.chartDef.values }];
+                                    let pptxChartType = pptx.ChartType.bar;
+                                    if (slide.chartDef.type.includes('line')) pptxChartType = pptx.ChartType.line;
+                                    if (slide.chartDef.type.includes('pie')) pptxChartType = pptx.ChartType.pie;
+                                    pptxSlide.addChart(pptxChartType, chartData, { x: 6.5, y: 1.6, w: 6.3, h: 4.5 });
+                                }
+                            } else {
+                                // Full-width chart slide with minimal text
+                                if (hasSubstantialContent) {
+                                    pptxSlide.addText(slide.content, {
+                                        x: 0.6, y: 1.4, w: 12.0, h: 1.2,
+                                        fontSize: 13, fontFace: 'Arial', color: COLORS.bodyText, valign: 'top'
+                                    });
+                                }
+
+                                try {
+                                    const chartBase64 = await fetchChartImage(slide.chartDef, 900, 450);
+                                    if (chartBase64) {
+                                        const chartY = hasSubstantialContent ? 2.8 : 1.6;
+                                        const chartH = hasSubstantialContent ? 4.2 : 5.3;
+                                        pptxSlide.addImage({
+                                            data: chartBase64,
+                                            x: 1.5, y: chartY, w: 10.0, h: chartH,
+                                            rounding: true
+                                        });
+                                    }
+                                } catch (e) {
+                                    const chartData = [{ name: "Data", labels: slide.chartDef.labels, values: slide.chartDef.values }];
+                                    let pptxChartType = pptx.ChartType.bar;
+                                    if (slide.chartDef.type.includes('line')) pptxChartType = pptx.ChartType.line;
+                                    if (slide.chartDef.type.includes('pie')) pptxChartType = pptx.ChartType.pie;
+                                    pptxSlide.addChart(pptxChartType, chartData, {
+                                        x: 1.5, y: hasSubstantialContent ? 2.8 : 1.6,
+                                        w: 10.0, h: hasSubstantialContent ? 4.2 : 5.3
+                                    });
+                                }
+                            }
+                        } else {
+                            // --- Text-only slide ---
+                            const contentLines = slide.content.split('\n').filter(l => l.trim());
+                            const textObjects = contentLines.map(line => {
+                                const isBullet = line.trim().startsWith('-') || line.trim().startsWith('•');
+                                return {
+                                    text: isBullet ? line.replace(/^[-•*]\s*/, '').trim() : line.trim(),
+                                    options: {
+                                        fontSize: 14, fontFace: 'Arial', color: COLORS.bodyText,
+                                        bullet: isBullet ? { code: '2022' } : undefined,
+                                        paraSpaceBefore: 6,
+                                        breakType: 'none' as const
+                                    }
+                                };
+                            });
+
+                            pptxSlide.addText(textObjects.length > 0 ? textObjects : [{ text: slide.content, options: { fontSize: 14, fontFace: 'Arial', color: COLORS.bodyText } }], {
+                                x: 0.6, y: 1.5, w: 12.0, h: 5.5, valign: 'top'
+                            });
+                        }
+
+                        // Slide number
+                        pptxSlide.addText(`${si + 1}`, {
+                            x: 12.5, y: 7.0, w: 0.6, h: 0.3,
+                            fontSize: 9, fontFace: 'Arial',
+                            color: accent, align: 'right'
+                        });
                     }
                 }
 

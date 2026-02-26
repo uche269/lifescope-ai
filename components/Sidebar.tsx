@@ -7,9 +7,11 @@ import {
   FileText,
   Settings,
   BrainCircuit,
-  X
+  X,
+  Shield
 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -17,6 +19,8 @@ interface SidebarProps {
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
+  const { planInfo } = useAuth();
+  const isAdmin = planInfo?.is_admin || planInfo?.effectivePlan === 'admin';
 
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
@@ -90,6 +94,19 @@ const Sidebar: React.FC<SidebarProps> = ({ isOpen, onClose }) => {
             <Settings className="w-5 h-5" />
             <span className="text-sm font-medium">Settings</span>
           </NavLink>
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              onClick={() => onClose()}
+              className={({ isActive }) => `flex items-center gap-3 px-4 py-3 transition-colors w-full rounded-lg ${isActive
+                ? 'bg-gradient-to-r from-red-600/80 to-red-700/60 text-white shadow-lg shadow-red-500/25 nav-active'
+                : 'text-red-400/60 hover:text-red-300 hover:bg-slate-900/80'
+                }`}
+            >
+              <Shield className="w-5 h-5" />
+              <span className="text-sm font-medium">Admin</span>
+            </NavLink>
+          )}
         </div>
       </div>
     </>

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
     CheckCircle2, ShieldCheck, User, Palette,
-    Sun, Moon, LogOut, Trash2, Sparkles, Bell, Mail, Save, Loader2
+    Sun, Moon, LogOut, Trash2, Sparkles, Bell, Mail, Save, Loader2, MessageSquare, Send
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
@@ -12,7 +12,13 @@ const Settings: React.FC = () => {
     const { theme, setTheme } = useTheme();
 
     // Active section
-    const [activeSection, setActiveSection] = useState<'profile' | 'appearance' | 'notifications' | 'account'>('profile');
+    const [activeSection, setActiveSection] = useState<'profile' | 'appearance' | 'notifications' | 'feedback' | 'account'>('profile');
+
+    // Feedback form
+    const [feedbackType, setFeedbackType] = useState<'complaint' | 'recommendation'>('recommendation');
+    const [feedbackMessage, setFeedbackMessage] = useState('');
+    const [feedbackLoading, setFeedbackLoading] = useState(false);
+    const [feedbackSuccess, setFeedbackSuccess] = useState(false);
 
     // Notification preferences
     const [notifications, setNotifications] = useState({
@@ -103,10 +109,26 @@ const Settings: React.FC = () => {
         }
     };
 
+    const handleSubmitFeedback = async () => {
+        if (!feedbackMessage.trim()) return;
+        setFeedbackLoading(true);
+        try {
+            await api.post('/support/ticket', { type: feedbackType, message: feedbackMessage });
+            setFeedbackSuccess(true);
+            setFeedbackMessage('');
+            setTimeout(() => setFeedbackSuccess(false), 5000);
+        } catch (e: any) {
+            alert('Failed to submit feedback: ' + e.message);
+        } finally {
+            setFeedbackLoading(false);
+        }
+    };
+
     const sections = [
         { id: 'profile' as const, label: 'Profile', icon: User },
         { id: 'appearance' as const, label: 'Appearance', icon: Palette },
         { id: 'notifications' as const, label: 'Notifications', icon: Bell },
+        { id: 'feedback' as const, label: 'Feedback', icon: MessageSquare },
         { id: 'account' as const, label: 'Account', icon: ShieldCheck },
     ];
 
@@ -420,6 +442,89 @@ const Settings: React.FC = () => {
                                     <><Save className="w-5 h-5" /> Save Preferences</>
                                 )}
                             </button>
+                        </div>
+                    )}
+
+                    {/* ======================== FEEDBACK ======================== */}
+                    {activeSection === 'feedback' && (
+                        <div className="glass-panel rounded-2xl p-8 space-y-6">
+                            <div className="flex items-center gap-3 pb-6 border-b border-slate-800">
+                                <div className="p-3 bg-indigo-500/10 rounded-xl">
+                                    <MessageSquare className="w-6 h-6 text-indigo-400" />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-white">Submit Feedback</h3>
+                                    <p className="text-xs text-slate-500">Help us improve LifeScope with your complaints or suggestions</p>
+                                </div>
+                            </div>
+
+                            {feedbackSuccess && (
+                                <div className="bg-emerald-500/10 border border-emerald-500/30 rounded-xl p-4 flex items-center gap-3">
+                                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                                    <p className="text-sm text-emerald-300">Thank you! Your feedback has been submitted successfully.</p>
+                                </div>
+                            )}
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-3">Type</label>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <button
+                                        onClick={() => setFeedbackType('recommendation')}
+                                        className={`flex items-center gap-2 p-4 rounded-xl border-2 transition-all ${feedbackType === 'recommendation'
+                                                ? 'border-emerald-500 bg-emerald-500/10'
+                                                : 'border-slate-700 hover:border-slate-600'
+                                            }`}
+                                    >
+                                        <span className="text-lg">💡</span>
+                                        <div className="text-left">
+                                            <p className="text-sm font-semibold text-white">Recommendation</p>
+                                            <p className="text-xs text-slate-500">Suggest an improvement</p>
+                                        </div>
+                                    </button>
+                                    <button
+                                        onClick={() => setFeedbackType('complaint')}
+                                        className={`flex items-center gap-2 p-4 rounded-xl border-2 transition-all ${feedbackType === 'complaint'
+                                                ? 'border-red-500 bg-red-500/10'
+                                                : 'border-slate-700 hover:border-slate-600'
+                                            }`}
+                                    >
+                                        <span className="text-lg">🚨</span>
+                                        <div className="text-left">
+                                            <p className="text-sm font-semibold text-white">Complaint</p>
+                                            <p className="text-xs text-slate-500">Report an issue</p>
+                                        </div>
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Your Message</label>
+                                <textarea
+                                    value={feedbackMessage}
+                                    onChange={e => setFeedbackMessage(e.target.value)}
+                                    placeholder={feedbackType === 'complaint'
+                                        ? 'Describe the issue you encountered...'
+                                        : 'Share your idea or suggestion...'}
+                                    rows={5}
+                                    className="w-full bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 resize-none transition-colors"
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleSubmitFeedback}
+                                disabled={!feedbackMessage.trim() || feedbackLoading}
+                                className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-all"
+                            >
+                                {feedbackLoading ? (
+                                    <><Loader2 className="w-5 h-5 animate-spin" /> Submitting...</>
+                                ) : (
+                                    <><Send className="w-5 h-5" /> Submit Feedback</>
+                                )}
+                            </button>
+
+                            <p className="text-xs text-slate-500 text-center">
+                                Your feedback is reviewed daily. We'll use your contact details on file to follow up if needed.
+                            </p>
                         </div>
                     )}
 

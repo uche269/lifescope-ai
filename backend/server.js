@@ -192,6 +192,21 @@ const initDb = async () => {
             ADD COLUMN IF NOT EXISTS topup_credits INTEGER DEFAULT 0;
         `);
 
+        // Support Tickets (Complaints & Recommendations)
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS public.support_tickets (
+                id UUID DEFAULT uuid_generate_v4() PRIMARY KEY,
+                user_id UUID NOT NULL,
+                type TEXT CHECK (type IN ('complaint', 'recommendation')),
+                message TEXT NOT NULL,
+                user_name TEXT,
+                user_email TEXT,
+                user_phone TEXT,
+                status TEXT DEFAULT 'new',
+                created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+        `);
+
         console.log("✅ Database schema ensured (all tables)");
     } catch (err) {
         console.error("❌ Database schema init failed:", err);
@@ -2139,50 +2154,73 @@ app.post('/api/ai/report-gen', aiAuth, async (req, res) => {
         const claudeModel = getClaudeModel(req);
 
         const chartInstructions = `
-CHART DATA FORMAT (CRITICAL):
-When your report includes numerical data that would benefit from visualization (trends, comparisons, distributions), you MUST include chart data blocks. Format each chart EXACTLY like this:
+CHART DATA FORMAT (CRITICAL - YOU MUST FOLLOW THIS EXACTLY):
+When your report includes ANY numerical data, comparisons, trends, market sizes, percentages, or distributions, you MUST include chart data blocks. Even if you need to estimate reasonable figures, ALWAYS include charts. Format each chart EXACTLY like this:
 
 ---SLIDE---
 Title: [Section Title]
+Subtitle: [Optional one-line subtitle or key takeaway]
 Layout: split
-Content: [Your text analysis for this section]
+Content: [Your detailed text analysis for this section. Write 3-5 sentences minimum with specific data points, statistics, and insights. Do not write generic filler.]
 ---CHART---
 Type: [bar OR line OR pie]
-Labels: [Label1, Label2, Label3, Label4]
-Values: [100, 200, 150, 300]
+Labels: [Label1, Label2, Label3, Label4, Label5]
+Values: [100, 200, 150, 300, 250]
 
-RULES FOR CHARTS:
-- Include at least 2-3 charts in every report where data is available
-- Use "bar" for comparisons, "line" for trends over time, "pie" for proportions
-- Labels and Values must have the same number of comma-separated items
-- Values must be numbers only (no currency symbols, no % signs)
-- Use "Layout: split" when a chart is present, "Layout: full" for text-only sections
-- Separate each section with ---SLIDE---
-- For sections WITHOUT charts, just use:
+FOR SLIDES WITHOUT CHARTS:
 ---SLIDE---
 Title: [Section Title]
+Subtitle: [Optional subtitle]
 Layout: full
-Content: [Your text content]
+Content: [Your detailed text content. Write rich, executive-quality paragraphs. Include bullet points as separate lines starting with a dash. Each slide should have substantial content - at least 4-6 lines of text.]
+
+MANDATORY CHART RULES:
+- Include AT LEAST 4-5 charts across the entire report - this is NON-NEGOTIABLE
+- Charts can appear on BOTH split and full layout slides
+- Use "bar" for comparisons and rankings, "line" for trends over time, "pie" for proportions/market share
+- Labels and Values MUST have the same number of comma-separated items (minimum 3, maximum 8)
+- Values MUST be numbers only (no currency symbols, no % signs, no text)
+- Separate each section with ---SLIDE---
+- EVERY report must have charts for: overview/summary data, key metrics comparison, trend analysis, and distribution/breakdown
 `;
 
         const formatInstructions = {
-            pdf: `Structure as a multi-section report. ${chartInstructions}\nStart with an Executive Summary section, then detailed analysis sections with charts, and end with Conclusions and Recommendations. Aim for 1500-2500 words of text content plus 2-3 charts.`,
-            docx: `Structure as a formal document. ${chartInstructions}\nInclude Title, Executive Summary, detailed sections with sub-headings and charts where relevant, and appendices. Use professional business language. Aim for 2000-3000 words plus charts.`,
+            pdf: `Structure as a multi-section professional report. ${chartInstructions}\nStart with a Title section, then Executive Summary, then 4-6 detailed analysis sections each with charts where applicable, and end with Conclusions and Recommendations. Aim for 2000-3000 words of text content plus 4-5 charts. Each section should have substantive analysis, not just bullet points.`,
+            docx: `Structure as a formal business document. ${chartInstructions}\nInclude Title, Executive Summary, Table of Contents outline, 4-6 detailed sections with sub-headings and charts, Key Findings, and Appendices. Use professional business language. Aim for 2500-4000 words plus charts.`,
             xlsx: 'Return data in a structured tabular format. Use | (pipe) to separate columns, and new lines for rows. First row must be headers. Include multiple data tables if the topic warrants it. Add a summary row at the bottom of each table.',
-            pptx: `Structure as presentation slides using the exact format below. ${chartInstructions}\nInclude a title slide, agenda slide, 8-12 content slides (at least 3 with charts), and a summary slide. Keep bullet points concise (under 15 words each).`
+            pptx: `Structure as a PROFESSIONAL EXECUTIVE PRESENTATION using the exact slide format below. ${chartInstructions}
+
+PRESENTATION STRUCTURE (10-15 slides total):
+1. TITLE SLIDE - Title of the presentation, subtitle with date and context
+2. EXECUTIVE SUMMARY SLIDE - 4-5 key takeaways as bullet points (each starting with a dash)
+3. AGENDA/OVERVIEW SLIDE - List the sections covered
+4-10. CONTENT SLIDES - Detailed analysis sections. At least 4 of these MUST have charts. Each content slide should have:
+   - A clear, specific title (not generic like "Analysis")
+   - A subtitle with the key insight
+   - Rich content with specific data points, percentages, and comparisons
+   - Charts where numerical data is discussed
+11-12. KEY FINDINGS / RECOMMENDATIONS SLIDE - Actionable recommendations with priority levels
+13. SUMMARY/CONCLUSION SLIDE - Final takeaways
+
+CONTENT QUALITY REQUIREMENTS:
+- Write like a McKinsey consultant. Every slide should tell a story with data.
+- Include specific numbers, percentages, year-over-year comparisons
+- Each bullet point should start with a dash (-) on its own line
+- Do NOT write vague statements like "The market is growing." Instead write "The market grew 23% year-over-year to $4.2B in 2025"
+- Minimum 4 charts across the presentation - bar charts for comparisons, line charts for trends, pie charts for breakdowns`
         };
 
         const contextText = documentText ? `\nREFERENCE DOCUMENT:\n---\n${documentText.slice(0, 30000)}\n---\n` : '';
         const templateSection = templateText ? `\nREQUIRED TEMPLATE STRUCTURE:\n---\n${templateText.slice(0, 15000)}\n---\nCRITICAL: Match the layout, headings, style, and outline of this template exactly. Fill in the data without breaking the template structure.\n` : '';
 
-        const systemPrompt = `You are a world-class report generation AI used by executives and professionals. Your reports should be comprehensive, data-driven, and publication-ready.\n${contextText}${templateSection}\nThe user wants a report on: "${prompt}"\n\nFormat requirement: ${formatInstructions[format] || formatInstructions.pdf}\n\nQUALITY STANDARDS:\n1. Include specific data points, statistics, and figures wherever possible\n2. ALWAYS include chart data blocks for numerical data - this is CRITICAL for visual reports\n3. Cite trends and provide comparative analysis\n4. Include actionable recommendations\n5. Use professional, authoritative language\n6. Structure content logically with clear progression\n7. Do NOT use markdown formatting (no **, ##, --). Use CAPS for headings in text content.`;
+        const systemPrompt = `You are a world-class report generation AI used by C-suite executives at Fortune 500 companies. Your reports are comprehensive, data-rich, visually structured, and publication-ready. You NEVER produce basic or generic content.\n${contextText}${templateSection}\nThe user wants a report on: "${prompt}"\n\nFormat requirement: ${formatInstructions[format] || formatInstructions.pdf}\n\nQUALITY STANDARDS:\n1. Include specific data points, statistics, percentages, and figures - estimate reasonable figures if exact data is unavailable\n2. ALWAYS include chart data blocks for ANY numerical data - this is CRITICAL and NON-NEGOTIABLE\n3. Cite trends, year-over-year changes, and provide comparative analysis\n4. Include actionable, specific recommendations with timelines\n5. Use professional, authoritative, consultant-grade language\n6. Structure content with clear logical progression and narrative flow\n7. Do NOT use markdown formatting (no **, ##, --). Use CAPS for headings in text content.\n8. Each section must have SUBSTANTIAL content - no single-sentence sections allowed\n9. Include at minimum 4 charts across the entire report`;
 
         if (claudeModel && process.env.CLAUDE_API_KEY) {
             // Use Claude for Pro/Premium users
             const claude = await getClaudeClient();
             const claudeResponse = await claude.messages.create({
                 model: claudeModel,
-                max_tokens: 8192,
+                max_tokens: 12000,
                 messages: [{ role: 'user', content: systemPrompt }]
             });
             const text = claudeResponse.content[0]?.text || '';
@@ -2550,6 +2588,171 @@ const sendMonthlySummaries = async () => {
 // '0 9 1 * *' means: Minute 0, Hour 9, Day 1 of Month, Every Month, Every Day of Week
 cron.schedule('0 9 1 * *', () => {
     sendMonthlySummaries();
+});
+
+// ============================
+// SUPPORT TICKETS (Complaints & Recommendations)
+// ============================
+
+// Submit a support ticket
+app.post('/api/support/ticket', ensureAuth, async (req, res) => {
+    try {
+        const { type, message } = req.body;
+        if (!type || !message) return res.status(400).json({ error: 'Type and message are required' });
+        if (!['complaint', 'recommendation'].includes(type)) return res.status(400).json({ error: 'Type must be complaint or recommendation' });
+
+        const { rows } = await pool.query(
+            `INSERT INTO public.support_tickets (user_id, type, message, user_name, user_email, user_phone)
+             VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+            [req.user.id, type, message, req.user.full_name || '', req.user.email || '', req.user.phone || '']
+        );
+
+        console.log(`📝 Support ticket (${type}) submitted by ${req.user.email}`);
+        res.json({ success: true, ticket: rows[0] });
+    } catch (err) {
+        console.error('Support ticket error:', err);
+        res.status(500).json({ error: 'Failed to submit ticket' });
+    }
+});
+
+// Admin: View all support tickets
+app.get('/api/support/tickets', ensureAuth, ensureAdmin, async (req, res) => {
+    try {
+        const { rows } = await pool.query(
+            `SELECT * FROM public.support_tickets ORDER BY created_at DESC LIMIT 100`
+        );
+        res.json({ data: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ============================
+// DAILY COMPLAINTS EMAIL CRON
+// ============================
+
+const sendDailyComplaintsReport = async () => {
+    try {
+        console.log('⏳ Starting daily complaints/recommendations email report...');
+
+        // Get all tickets created today that haven't been emailed yet
+        const { rows: tickets } = await pool.query(
+            `SELECT * FROM public.support_tickets 
+             WHERE created_at >= CURRENT_DATE AND status = 'new'
+             ORDER BY type, created_at ASC`
+        );
+
+        if (tickets.length === 0) {
+            console.log('ℹ️ No new support tickets today. Skipping email.');
+            return;
+        }
+
+        const complaints = tickets.filter(t => t.type === 'complaint');
+        const recommendations = tickets.filter(t => t.type === 'recommendation');
+
+        const formatTicket = (t) => `
+            <tr style="border-bottom:1px solid #e2e8f0;">
+                <td style="padding:12px;">${t.user_name || 'Unknown'}</td>
+                <td style="padding:12px;"><a href="mailto:${t.user_email}">${t.user_email || 'N/A'}</a></td>
+                <td style="padding:12px;">${t.user_phone || 'N/A'}</td>
+                <td style="padding:12px;">${t.message}</td>
+                <td style="padding:12px;font-size:12px;color:#64748b;">${new Date(t.created_at).toLocaleTimeString()}</td>
+            </tr>`;
+
+        const tableHeader = `
+            <tr style="background:#f1f5f9;">
+                <th style="padding:12px;text-align:left;font-weight:600;">Name</th>
+                <th style="padding:12px;text-align:left;font-weight:600;">Email</th>
+                <th style="padding:12px;text-align:left;font-weight:600;">Phone</th>
+                <th style="padding:12px;text-align:left;font-weight:600;">Message</th>
+                <th style="padding:12px;text-align:left;font-weight:600;">Time</th>
+            </tr>`;
+
+        let html = `
+            <div style="font-family:Arial,sans-serif;max-width:800px;margin:0 auto;">
+                <div style="background:#1e1b4b;padding:20px 30px;border-radius:8px 8px 0 0;">
+                    <h1 style="color:white;margin:0;font-size:22px;">📋 Daily Support Report</h1>
+                    <p style="color:#818cf8;margin:5px 0 0;font-size:14px;">${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                </div>
+                <div style="padding:20px 30px;background:white;border:1px solid #e2e8f0;">
+                    <p style="color:#475569;margin-bottom:20px;">Total tickets today: <strong>${tickets.length}</strong> (${complaints.length} complaints, ${recommendations.length} recommendations)</p>`;
+
+        if (complaints.length > 0) {
+            html += `
+                    <h2 style="color:#dc2626;border-bottom:2px solid #dc2626;padding-bottom:8px;">🚨 Complaints (${complaints.length})</h2>
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">
+                        ${tableHeader}
+                        ${complaints.map(formatTicket).join('')}
+                    </table>`;
+        }
+
+        if (recommendations.length > 0) {
+            html += `
+                    <h2 style="color:#059669;border-bottom:2px solid #059669;padding-bottom:8px;">💡 Recommendations (${recommendations.length})</h2>
+                    <table style="width:100%;border-collapse:collapse;margin-bottom:30px;">
+                        ${tableHeader}
+                        ${recommendations.map(formatTicket).join('')}
+                    </table>`;
+        }
+
+        html += `
+                </div>
+                <div style="background:#f8fafc;padding:15px 30px;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 8px 8px;">
+                    <p style="color:#94a3b8;font-size:12px;margin:0;">This is an automated daily report from LifeScope AI.</p>
+                </div>
+            </div>`;
+
+        const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_EMAIL;
+        if (!adminEmail) {
+            console.warn('⚠️ No ADMIN_EMAIL or SMTP_EMAIL configured. Cannot send daily report.');
+            return;
+        }
+
+        const subject = `[LifeScope] Daily Support Report - ${complaints.length} complaints, ${recommendations.length} recommendations`;
+
+        if (transporter && process.env.SMTP_EMAIL) {
+            await transporter.sendMail({
+                from: `"LifeScope System" <${process.env.SMTP_EMAIL}>`,
+                to: adminEmail,
+                subject,
+                html
+            });
+            console.log('✅ Daily complaints report sent via SMTP');
+        } else if (process.env.RESEND_API_KEY && process.env.RESEND_API_KEY !== 're_placeholder') {
+            await resend.emails.send({
+                from: 'LifeScope System <support@getlifescope.com>',
+                to: adminEmail,
+                subject,
+                html
+            });
+            console.log('✅ Daily complaints report sent via Resend');
+        }
+
+        // Mark tickets as emailed
+        const ticketIds = tickets.map(t => t.id);
+        if (ticketIds.length > 0) {
+            const placeholders = ticketIds.map((_, i) => `$${i + 1}`).join(',');
+            await pool.query(`UPDATE public.support_tickets SET status = 'emailed' WHERE id IN (${placeholders})`, ticketIds);
+        }
+
+    } catch (err) {
+        console.error('❌ Daily complaints report failed:', err);
+    }
+};
+
+// Schedule daily at 11:00 PM (23:00)
+cron.schedule('0 23 * * *', () => {
+    sendDailyComplaintsReport();
+});
+
+// Manual trigger for admin testing
+app.post('/api/email/trigger-daily-report', ensureAuth, ensureAdmin, async (req, res) => {
+    try {
+        sendDailyComplaintsReport();
+        res.json({ success: true, message: 'Daily complaints report triggered.' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 
 // Manual trigger route for testing or AI invocation

@@ -7,6 +7,7 @@ import FinanceManager from './components/FinanceManager';
 import DocumentTools from './components/DocumentTools';
 import Settings from './components/Settings';
 import Health from './components/Health';
+import AdminDashboard from './components/AdminDashboard';
 import ChatWidget from './components/ChatWidget';
 import NotificationBanner from './components/NotificationBanner';
 import { Goal, GoalCategory, Activity } from './types';
@@ -133,6 +134,7 @@ const MainApp: React.FC = () => {
             <Route path="/health" element={<Health />} />
             <Route path="/docs" element={<DocumentTools />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
 
