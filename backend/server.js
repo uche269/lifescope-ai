@@ -2535,6 +2535,10 @@ if (process.env.NODE_ENV === 'production') {
     }));
 
     app.get('*', (req, res) => {
+        // Don't intercept API routes — let them fall through to handlers registered below
+        if (req.path.startsWith('/api/')) {
+            return res.status(404).json({ error: 'API route not found' });
+        }
         res.sendFile(path.join(__dirname, '../dist/index.html'));
     });
 }

@@ -57,25 +57,36 @@ const AdminDashboard: React.FC = () => {
     const fetchData = async () => {
         setLoading(true);
         setError('');
+        const errors: string[] = [];
         try {
             const fetchJson = async (url: string) => {
                 const res = await fetch(url, { credentials: 'include' });
                 if (!res.ok) {
                     const text = await res.text();
-                    throw new Error(`${url} returned ${res.status}: ${text}`);
+                    throw new Error(`${url} → ${res.status}: ${text.slice(0, 100)}`);
                 }
                 return res.json();
             };
-            const [statsRes, usersRes, ticketsRes] = await Promise.all([
-                fetchJson('/api/admin/stats'),
-                fetchJson('/api/admin/users'),
-                fetchJson('/api/support/tickets'),
-            ]);
-            setStats(statsRes.data || statsRes);
-            const usersData = usersRes.data || usersRes;
-            setUsers(Array.isArray(usersData) ? usersData : []);
-            const ticketsData = ticketsRes.data || ticketsRes;
-            setTickets(Array.isArray(ticketsData) ? ticketsData : []);
+
+            // Fetch independently so one failure doesn't blank the whole dashboard
+            try {
+                const statsRes = await fetchJson('/api/admin/stats');
+                setStats(statsRes.data || statsRes);
+            } catch (e: any) { errors.push(e.message); }
+
+            try {
+                const usersRes = await fetchJson('/api/admin/users');
+                const usersData = usersRes.data || usersRes;
+                setUsers(Array.isArray(usersData) ? usersData : []);
+            } catch (e: any) { errors.push(e.message); }
+
+            try {
+                const ticketsRes = await fetchJson('/api/support/tickets');
+                const ticketsData = ticketsRes.data || ticketsRes;
+                setTickets(Array.isArray(ticketsData) ? ticketsData : []);
+            } catch (e: any) { errors.push(e.message); }
+
+            if (errors.length > 0) setError(errors.join(' | '));
         } catch (err: any) {
             console.error('Admin data fetch error:', err);
             setError(err.message || 'Failed to load admin data');
