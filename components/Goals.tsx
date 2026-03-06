@@ -73,11 +73,14 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [showCompletedMap, setShowCompletedMap] = useState<Record<string, boolean>>({});
 
-  // Expanded Goal Modal State (single goal at a time)
-  const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
+  // Full Expanded Goal Modal State
+  const [fullExpandedGoalId, setFullExpandedGoalId] = useState<string | null>(null);
 
-  const toggleExpand = (goalId: string) => {
-    setExpandedGoalId(prev => prev === goalId ? null : goalId);
+  // Inline Expanded Goals State (Medium Expand)
+  const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>({});
+
+  const toggleInlineExpand = (goalId: string) => {
+    setExpandedGoals(prev => ({ ...prev, [goalId]: !prev[goalId] }));
   };
 
   // Delete Confirmation State
@@ -234,7 +237,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     const id = deleteConfirm.goalId;
     const deletedGoal = goals.find(g => g.id === id);
     setDeleteConfirm(null);
-    if (expandedGoalId === id) setExpandedGoalId(null);
+    if (fullExpandedGoalId === id) setFullExpandedGoalId(null);
     try {
       await api.delete('goals', id);
       setGoals(prev => prev.filter(g => g.id !== id));
@@ -768,77 +771,213 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
       {/* Goals Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {goals.map((goal) => (
-          <div key={goal.id} className="glass-panel p-6 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all duration-300 relative group">
+        {goals.map((goal) => {
+          const isExpanded = expandedGoals[goal.id];
+          return (
+            <div key={goal.id} className={`glass-panel p-6 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all duration-300 relative group ${isExpanded ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
 
-            {/* Header */}
-            <div className="flex justify-between items-start mb-4">
-              <div onClick={() => toggleExpand(goal.id)} className="cursor-pointer flex-1">
-                <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider
+              {/* Header */}
+              <div className="flex justify-between items-start mb-4">
+                <div onClick={() => toggleInlineExpand(goal.id)} className="cursor-pointer flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider
                       ${goal.priority === 'High' ? 'bg-red-500/20 text-red-400 border border-red-500/20' :
-                      goal.priority === 'Medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
-                        'bg-slate-700 text-slate-400 border border-slate-600'}`}>
-                    {goal.priority}
-                  </span>
-                  <span className="text-xs text-slate-500">{goal.category}</span>
+                        goal.priority === 'Medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
+                          'bg-slate-700 text-slate-400 border border-slate-600'}`}>
+                      {goal.priority}
+                    </span>
+                    <span className="text-xs text-slate-500">{goal.category}</span>
+                  </div>
+                  <h3 className={`text-lg font-bold text-white group-hover:text-indigo-400 transition-colors ${isExpanded ? '' : 'line-clamp-1'}`}>{goal.title}</h3>
                 </div>
-                <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1">{goal.title}</h3>
+
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button onClick={() => setFullExpandedGoalId(goal.id)} className="p-1.5 text-slate-400 hover:text-indigo-400 hover:bg-slate-800 rounded-lg transition-colors" title="Full Expand">
+                    <Maximize2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => openEditModal(goal)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                    <Edit2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => confirmDeleteGoal(goal)} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
 
-              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button onClick={() => openEditModal(goal)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
-                  <Edit2 className="w-4 h-4" />
-                </button>
-                <button onClick={() => confirmDeleteGoal(goal)} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            </div>
-
-            {/* Progress Bar */}
-            <div className="mb-4">
-              <div className="flex justify-between text-xs mb-2">
-                <span className={goal.progress >= (goal.target || 100) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
-                  {goal.linked_module && goal.target
-                    ? `${goal.progress.toLocaleString()} / ${goal.target.toLocaleString()} ${goal.linked_module === 'health_weight' ? 'kg' : ''}`
-                    : goal.progress === 100 ? 'Completed' : `${goal.progress}% Complete`}
-                </span>
-                {goal.deadline && (
-                  <span className="text-slate-500 flex items-center gap-1">
-                    <Calendar className="w-3 h-3" />
-                    {new Date(goal.deadline).toLocaleDateString()}
+              {/* Progress Bar */}
+              <div className="mb-4">
+                <div className="flex justify-between text-xs mb-2">
+                  <span className={goal.progress >= (goal.target || 100) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                    {goal.linked_module && goal.target
+                      ? `${goal.progress.toLocaleString()} / ${goal.target.toLocaleString()} ${goal.linked_module === 'health_weight' ? 'kg' : ''}`
+                      : goal.progress === 100 ? 'Completed' : `${goal.progress}% Complete`}
                   </span>
-                )}
+                  {goal.deadline && (
+                    <span className="text-slate-500 flex items-center gap-1">
+                      <Calendar className="w-3 h-3" />
+                      {new Date(goal.deadline).toLocaleDateString()}
+                    </span>
+                  )}
+                </div>
+                <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ease-out ${goal.progress >= (goal.target || 100) ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                    style={{ width: `${Math.min(100, goal.target ? (goal.progress / goal.target) * 100 : goal.progress)}%` }}
+                  ></div>
+                </div>
               </div>
-              <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
-                <div
-                  className={`h-full rounded-full transition-all duration-1000 ease-out ${goal.progress >= (goal.target || 100) ? 'bg-emerald-500' : 'bg-indigo-500'}`}
-                  style={{ width: `${Math.min(100, goal.target ? (goal.progress / goal.target) * 100 : goal.progress)}%` }}
-                ></div>
-              </div>
-            </div>
 
-            {/* Click to Expand */}
-            <div
-              onClick={() => toggleExpand(goal.id)}
-              className="cursor-pointer p-3 bg-slate-900/50 rounded-xl hover:bg-slate-800/50 transition-colors border border-dashed border-slate-800 hover:border-indigo-500/30 flex items-center justify-between group/preview"
-            >
-              <span className="text-xs text-slate-400 group-hover/preview:text-slate-200">
-                {goal.activities.length} Activities & AI Insights
-              </span>
-              <Maximize2 className="w-3 h-3 text-slate-600 group-hover/preview:text-indigo-400" />
+              {/* Collapsed View Preview */}
+              {!isExpanded && (
+                <div
+                  onClick={() => toggleInlineExpand(goal.id)}
+                  className="cursor-pointer p-3 bg-slate-900/50 rounded-xl hover:bg-slate-800/50 transition-colors border border-dashed border-slate-800 hover:border-indigo-500/30 flex items-center justify-between group/preview"
+                >
+                  <span className="text-xs text-slate-400 group-hover/preview:text-slate-200">
+                    {goal.activities.length} Activities & AI Insights
+                  </span>
+                  <ChevronRight className="w-4 h-4 text-slate-600 group-hover/preview:text-indigo-400" />
+                </div>
+              )}
+
+              {/* Inline Expanded Content (Medium Expand) */}
+              {isExpanded && (
+                <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-4">
+                    {/* Activities List */}
+                    <div className="space-y-3">
+                      <div className="flex justify-between items-center">
+                        <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Key Activities</h4>
+                        <button
+                          onClick={() => setAddingActivityTo(goal.id)}
+                          className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300"
+                        >
+                          <Plus className="w-3 h-3" /> Add Activity
+                        </button>
+                      </div>
+
+                      <div className="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                        {/* New Activity Input */}
+                        {addingActivityTo === goal.id && (
+                          <div className="p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg animate-in fade-in">
+                            <input
+                              autoFocus
+                              placeholder="Activity name..."
+                              className="w-full bg-transparent border-b border-indigo-500/30 text-sm text-white focus:outline-none mb-2 pb-1"
+                              value={newActivityName}
+                              onChange={e => setNewActivityName(e.target.value)}
+                              onKeyDown={e => { if (e.key === 'Enter') handleAddActivity(goal.id); }}
+                            />
+                            <div className="flex justify-between items-center">
+                              <div className="flex gap-2">
+                                <select
+                                  value={newActivityFreq}
+                                  onChange={(e) => setNewActivityFreq(e.target.value as any)}
+                                  className="bg-slate-900 text-xs text-slate-300 rounded border border-slate-700 px-1 focus:outline-none"
+                                >
+                                  <option value="Daily">Daily</option>
+                                  <option value="Weekly">Weekly</option>
+                                  <option value="Once">Once</option>
+                                </select>
+                                {newActivityFreq === 'Once' && (
+                                  <input
+                                    type="date"
+                                    value={newActivityDeadline}
+                                    onChange={(e) => setNewActivityDeadline(e.target.value)}
+                                    className="bg-slate-900 text-xs text-slate-300 rounded border border-slate-700 px-1 w-24 focus:outline-none"
+                                  />
+                                )}
+                              </div>
+                              <div className="flex gap-1">
+                                <button onClick={() => setAddingActivityTo(null)} className="p-1 text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                                <button onClick={() => handleAddActivity(goal.id)} className="p-1 text-indigo-400 hover:text-indigo-300"><Check className="w-4 h-4" /></button>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+
+                        {goal.activities.length === 0 && (
+                          <p className="text-sm text-slate-500 text-center py-4">No activities yet. Add one above!</p>
+                        )}
+
+                        {goal.activities.map(activity => (
+                          <div key={activity.id} className="group/act flex items-center justify-between p-2.5 hover:bg-slate-800/50 rounded-lg transition-colors border border-transparent hover:border-slate-700">
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <button
+                                onClick={() => toggleActivity(goal.id, activity.id)}
+                                className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all duration-300
+                                    ${checkIsCompleted(activity) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-600 hover:border-indigo-500'}`}
+                              >
+                                {checkIsCompleted(activity) && <Check className="w-3 h-3" />}
+                              </button>
+                              <div className="min-w-0">
+                                <p className={`text-sm transition-all ${checkIsCompleted(activity) ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                                  {activity.name}
+                                </p>
+                                <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                                  <span className="flex items-center gap-0.5"><TrendingUp className="w-3 h-3" /> {activity.frequency}</span>
+                                  {activity.deadline && (
+                                    <span className={`flex items-center gap-0.5 ${new Date(activity.deadline) < new Date() && !checkIsCompleted(activity) ? 'text-red-400' : ''}`}>
+                                      <AlertCircle className="w-3 h-3" /> {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-1 opacity-0 group-hover/act:opacity-100 transition-opacity px-2">
+                              <button onClick={() => confirmDeleteActivity(goal.id, activity)} className="text-slate-500 hover:text-red-400 transition-colors">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* AI Recommendations */}
+                    <div className="bg-indigo-900/10 border border-indigo-500/20 rounded-xl p-4 flex flex-col h-full">
+                      <div className="flex justify-between items-center mb-3">
+                        <h4 className="text-xs font-bold text-indigo-400 uppercase flex items-center gap-2">
+                          <Sparkles className="w-3 h-3" /> Gemini Insights
+                        </h4>
+                        <button
+                          onClick={() => generateAdvice(goal)}
+                          disabled={loadingAI === goal.id}
+                          className="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded transition-colors shrink-0"
+                        >
+                          {loadingAI === goal.id ? 'Generating...' : 'Refresh'}
+                        </button>
+                      </div>
+                      <div className="overflow-y-auto max-h-60 custom-scrollbar pr-1 flex-1">
+                        <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                          {goal.aiRecommendations ? goal.aiRecommendations.replace(/[*#]/g, '') : "Click refresh to generate actionable insights and identify pitfalls for this goal."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center pt-2 border-t border-slate-800/50 gap-4">
+                    <button onClick={() => toggleInlineExpand(goal.id)} className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
+                      <Minimize2 className="w-3 h-3" /> Collapse
+                    </button>
+                    <button onClick={() => setFullExpandedGoalId(goal.id)} className="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 transition-colors">
+                      <Maximize2 className="w-3 h-3" /> Full Expand
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* ===== EXPANDED GOAL MODAL OVERLAY ===== */}
-      {expandedGoalId && (() => {
-        const goal = goals.find(g => g.id === expandedGoalId);
+      {fullExpandedGoalId && (() => {
+        const goal = goals.find(g => g.id === fullExpandedGoalId);
         if (!goal) return null;
         return (
-          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 pt-8 overflow-y-auto" onClick={() => setExpandedGoalId(null)}>
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[55] flex items-start justify-center p-4 pt-8 overflow-y-auto custom-scrollbar" onClick={() => setFullExpandedGoalId(null)}>
             <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl p-6 animate-in fade-in zoom-in-95 my-4" onClick={e => e.stopPropagation()}>
 
               {/* Modal Header */}
@@ -868,7 +1007,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                   <button onClick={() => confirmDeleteGoal(goal)} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setExpandedGoalId(null)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-2">
+                  <button onClick={() => setFullExpandedGoalId(null)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-2">
                     <X className="w-5 h-5" />
                   </button>
                 </div>
