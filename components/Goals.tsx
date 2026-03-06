@@ -692,7 +692,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
         {goals.map((goal) => {
           const isExpanded = expandedGoals[goal.id];
           return (
-            <div key={goal.id} className={`glass-panel p-6 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all duration-300 relative group ${isExpanded ? 'row-span-2' : ''}`}>
+            <div key={goal.id} className={`glass-panel p-6 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all duration-300 relative group ${isExpanded ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
 
               {/* Header */}
               <div className="flex justify-between items-start mb-4">
@@ -706,7 +706,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                     </span>
                     <span className="text-xs text-slate-500">{goal.category}</span>
                   </div>
-                  <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1">{goal.title}</h3>
+                  <h3 className={`text-lg font-bold text-white group-hover:text-indigo-400 transition-colors ${isExpanded ? '' : 'line-clamp-1'}`}>{goal.title}</h3>
                 </div>
 
                 <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -771,7 +771,7 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       </button>
                     </div>
 
-                    <div className="space-y-2 max-h-48 overflow-y-auto pr-1 custom-scrollbar">
+                    <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar">
                       {/* New Activity Input */}
                       {addingActivityTo === goal.id && (
                         <div className="p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg animate-in fade-in">
