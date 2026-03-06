@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Goal, GoalCategory, Activity } from '../types';
-import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles, Maximize2, Minimize2, LayoutTemplate } from 'lucide-react';
+import { Trash2, Edit2, Plus, Check, X, Calendar, ChevronRight, TrendingUp, AlertCircle, Eye, EyeOff, Sparkles, Maximize2, Minimize2, LayoutTemplate, Undo2 } from 'lucide-react';
 import { getAIRecommendation } from '../services/geminiService';
 // import { supabase } from '../lib/supabase'; // Removed
 import { api } from '../services/api';
@@ -73,11 +73,31 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
   const [editingActivityId, setEditingActivityId] = useState<string | null>(null);
   const [showCompletedMap, setShowCompletedMap] = useState<Record<string, boolean>>({});
 
-  // Expanded Goals State
-  const [expandedGoals, setExpandedGoals] = useState<Record<string, boolean>>({});
+  // Expanded Goal Modal State (single goal at a time)
+  const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
 
   const toggleExpand = (goalId: string) => {
-    setExpandedGoals(prev => ({ ...prev, [goalId]: !prev[goalId] }));
+    setExpandedGoalId(prev => prev === goalId ? null : goalId);
+  };
+
+  // Delete Confirmation State
+  const [deleteConfirm, setDeleteConfirm] = useState<{ type: 'goal' | 'activity'; goalId: string; activityId?: string; name: string } | null>(null);
+
+  // Undo Toast State
+  const [undoToast, setUndoToast] = useState<{ message: string; undoFn: () => void; timer: NodeJS.Timeout } | null>(null);
+
+  const showUndoToast = (message: string, undoFn: () => void) => {
+    if (undoToast?.timer) clearTimeout(undoToast.timer);
+    const timer = setTimeout(() => setUndoToast(null), 8000);
+    setUndoToast({ message, undoFn, timer });
+  };
+
+  const handleUndo = () => {
+    if (undoToast) {
+      clearTimeout(undoToast.timer);
+      undoToast.undoFn();
+      setUndoToast(null);
+    }
   };
 
   // Temporary state for editing activity
@@ -205,13 +225,39 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     }
   };
 
-  const handleDeleteGoal = async (id: string) => {
-    if (window.confirm("Are you sure you want to delete this goal?")) {
-      try {
-        await api.delete('goals', id);
-        setGoals(goals.filter(g => g.id !== id));
-      } catch (e) { console.error(e); }
-    }
+  const confirmDeleteGoal = (goal: Goal) => {
+    setDeleteConfirm({ type: 'goal', goalId: goal.id, name: goal.title });
+  };
+
+  const executeDeleteGoal = async () => {
+    if (!deleteConfirm || deleteConfirm.type !== 'goal') return;
+    const id = deleteConfirm.goalId;
+    const deletedGoal = goals.find(g => g.id === id);
+    setDeleteConfirm(null);
+    if (expandedGoalId === id) setExpandedGoalId(null);
+    try {
+      await api.delete('goals', id);
+      setGoals(prev => prev.filter(g => g.id !== id));
+      if (deletedGoal) {
+        showUndoToast(`"${deletedGoal.title}" deleted`, async () => {
+          try {
+            const restored = await api.post('goals', {
+              user_id: user!.id,
+              title: deletedGoal.title,
+              category: deletedGoal.category,
+              priority: deletedGoal.priority,
+              description: '',
+              progress: deletedGoal.progress,
+              status: deletedGoal.status,
+              deadline: deletedGoal.deadline || null,
+              linked_module: deletedGoal.linked_module || null,
+              linked_target_value: deletedGoal.linked_target_value || null
+            });
+            if (restored) setGoals(prev => [...prev, { ...restored, activities: [] }]);
+          } catch (e) { console.error('Undo failed:', e); }
+        });
+      }
+    } catch (e) { console.error(e); }
   };
 
   const generateAdvice = async (goal: Goal) => {
@@ -340,7 +386,16 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     setNewActivityDeadline('');
   }
 
-  const deleteActivity = async (goalId: string, activityId: string) => {
+  const confirmDeleteActivity = (goalId: string, activity: Activity) => {
+    setDeleteConfirm({ type: 'activity', goalId, activityId: activity.id, name: activity.name });
+  };
+
+  const executeDeleteActivity = async () => {
+    if (!deleteConfirm || deleteConfirm.type !== 'activity' || !deleteConfirm.activityId) return;
+    const { goalId, activityId, name } = deleteConfirm;
+    const goal = goals.find(g => g.id === goalId);
+    const deletedActivity = goal?.activities.find(a => a.id === activityId);
+    setDeleteConfirm(null);
     try {
       await api.delete('activities', activityId);
     } catch (e) { return; }
@@ -348,19 +403,43 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
     setGoals(prevGoals => prevGoals.map(g => {
       if (g.id !== goalId) return g;
       const newActivities = g.activities.filter(a => a.id !== activityId);
-      // Recalc progress
       let progress = g.progress;
       if (!g.linked_module) {
-        const completed = newActivities.filter(a => checkIsCompleted(a)).length; // Use util
+        const completed = newActivities.filter(a => checkIsCompleted(a)).length;
         progress = newActivities.length ? Math.round((completed / newActivities.length) * 100) : 0;
       }
-
-      return {
-        ...g,
-        progress,
-        activities: newActivities
-      }
+      return { ...g, progress, activities: newActivities };
     }));
+
+    if (deletedActivity) {
+      showUndoToast(`"${name}" removed`, async () => {
+        try {
+          const restored = await api.post('activities', {
+            goal_id: goalId,
+            name: deletedActivity.name,
+            frequency: deletedActivity.frequency,
+            is_completed: checkIsCompleted(deletedActivity),
+            deadline: deletedActivity.deadline || null
+          });
+          if (restored) {
+            setGoals(prevGoals => prevGoals.map(g => {
+              if (g.id !== goalId) return g;
+              const newActivities = [...g.activities, {
+                id: restored.id, name: restored.name,
+                isCompleted: restored.is_completed,
+                frequency: restored.frequency, deadline: restored.deadline
+              }];
+              let progress = g.progress;
+              if (!g.linked_module) {
+                const completed = newActivities.filter(a => checkIsCompleted(a)).length;
+                progress = newActivities.length ? Math.round((completed / newActivities.length) * 100) : 0;
+              }
+              return { ...g, progress, activities: newActivities };
+            }));
+          }
+        } catch (e) { console.error('Undo failed:', e); }
+      });
+    }
   }
 
   const [showCategoryManager, setShowCategoryManager] = useState(false);
@@ -689,15 +768,83 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
 
       {/* Goals Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {goals.map((goal) => {
-          const isExpanded = expandedGoals[goal.id];
-          return (
-            <div key={goal.id} className={`glass-panel p-6 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all duration-300 relative group ${isExpanded ? 'col-span-1 md:col-span-2 lg:col-span-3' : ''}`}>
+        {goals.map((goal) => (
+          <div key={goal.id} className="glass-panel p-6 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all duration-300 relative group">
 
-              {/* Header */}
-              <div className="flex justify-between items-start mb-4">
-                <div onClick={() => toggleExpand(goal.id)} className="cursor-pointer flex-1">
-                  <div className="flex items-center gap-2 mb-1">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-4">
+              <div onClick={() => toggleExpand(goal.id)} className="cursor-pointer flex-1">
+                <div className="flex items-center gap-2 mb-1">
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider
+                      ${goal.priority === 'High' ? 'bg-red-500/20 text-red-400 border border-red-500/20' :
+                      goal.priority === 'Medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
+                        'bg-slate-700 text-slate-400 border border-slate-600'}`}>
+                    {goal.priority}
+                  </span>
+                  <span className="text-xs text-slate-500">{goal.category}</span>
+                </div>
+                <h3 className="text-lg font-bold text-white group-hover:text-indigo-400 transition-colors line-clamp-1">{goal.title}</h3>
+              </div>
+
+              <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button onClick={() => openEditModal(goal)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
+                  <Edit2 className="w-4 h-4" />
+                </button>
+                <button onClick={() => confirmDeleteGoal(goal)} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              </div>
+            </div>
+
+            {/* Progress Bar */}
+            <div className="mb-4">
+              <div className="flex justify-between text-xs mb-2">
+                <span className={goal.progress >= (goal.target || 100) ? 'text-emerald-400 font-medium' : 'text-slate-400'}>
+                  {goal.linked_module && goal.target
+                    ? `${goal.progress.toLocaleString()} / ${goal.target.toLocaleString()} ${goal.linked_module === 'health_weight' ? 'kg' : ''}`
+                    : goal.progress === 100 ? 'Completed' : `${goal.progress}% Complete`}
+                </span>
+                {goal.deadline && (
+                  <span className="text-slate-500 flex items-center gap-1">
+                    <Calendar className="w-3 h-3" />
+                    {new Date(goal.deadline).toLocaleDateString()}
+                  </span>
+                )}
+              </div>
+              <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                <div
+                  className={`h-full rounded-full transition-all duration-1000 ease-out ${goal.progress >= (goal.target || 100) ? 'bg-emerald-500' : 'bg-indigo-500'}`}
+                  style={{ width: `${Math.min(100, goal.target ? (goal.progress / goal.target) * 100 : goal.progress)}%` }}
+                ></div>
+              </div>
+            </div>
+
+            {/* Click to Expand */}
+            <div
+              onClick={() => toggleExpand(goal.id)}
+              className="cursor-pointer p-3 bg-slate-900/50 rounded-xl hover:bg-slate-800/50 transition-colors border border-dashed border-slate-800 hover:border-indigo-500/30 flex items-center justify-between group/preview"
+            >
+              <span className="text-xs text-slate-400 group-hover/preview:text-slate-200">
+                {goal.activities.length} Activities & AI Insights
+              </span>
+              <Maximize2 className="w-3 h-3 text-slate-600 group-hover/preview:text-indigo-400" />
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* ===== EXPANDED GOAL MODAL OVERLAY ===== */}
+      {expandedGoalId && (() => {
+        const goal = goals.find(g => g.id === expandedGoalId);
+        if (!goal) return null;
+        return (
+          <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-start justify-center p-4 pt-8 overflow-y-auto" onClick={() => setExpandedGoalId(null)}>
+            <div className="bg-slate-900 border border-slate-700 rounded-2xl w-full max-w-2xl p-6 animate-in fade-in zoom-in-95 my-4" onClick={e => e.stopPropagation()}>
+
+              {/* Modal Header */}
+              <div className="flex justify-between items-start mb-6">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider
                       ${goal.priority === 'High' ? 'bg-red-500/20 text-red-400 border border-red-500/20' :
                         goal.priority === 'Medium' ? 'bg-amber-500/20 text-amber-400 border border-amber-500/20' :
@@ -705,16 +852,24 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       {goal.priority}
                     </span>
                     <span className="text-xs text-slate-500">{goal.category}</span>
+                    {goal.deadline && (
+                      <span className="text-xs text-slate-500 flex items-center gap-1 ml-auto">
+                        <Calendar className="w-3 h-3" />
+                        {new Date(goal.deadline).toLocaleDateString()}
+                      </span>
+                    )}
                   </div>
-                  <h3 className={`text-lg font-bold text-white group-hover:text-indigo-400 transition-colors ${isExpanded ? '' : 'line-clamp-1'}`}>{goal.title}</h3>
+                  <h3 className="text-xl font-bold text-white">{goal.title}</h3>
                 </div>
-
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="flex items-center gap-1 ml-4">
                   <button onClick={() => openEditModal(goal)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors">
                     <Edit2 className="w-4 h-4" />
                   </button>
-                  <button onClick={() => handleDeleteGoal(goal.id)} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                  <button onClick={() => confirmDeleteGoal(goal)} className="p-1.5 text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
                     <Trash2 className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => setExpandedGoalId(null)} className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors ml-2">
+                    <X className="w-5 h-5" />
                   </button>
                 </div>
               </div>
@@ -727,14 +882,8 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                       ? `${goal.progress.toLocaleString()} / ${goal.target.toLocaleString()} ${goal.linked_module === 'health_weight' ? 'kg' : ''}`
                       : goal.progress === 100 ? 'Completed' : `${goal.progress}% Complete`}
                   </span>
-                  {goal.deadline && (
-                    <span className="text-slate-500 flex items-center gap-1">
-                      <Calendar className="w-3 h-3" />
-                      {new Date(goal.deadline).toLocaleDateString()}
-                    </span>
-                  )}
                 </div>
-                <div className="h-2 bg-slate-900 rounded-full overflow-hidden border border-slate-800">
+                <div className="h-2.5 bg-slate-800 rounded-full overflow-hidden border border-slate-700">
                   <div
                     className={`h-full rounded-full transition-all duration-1000 ease-out ${goal.progress >= (goal.target || 100) ? 'bg-emerald-500' : 'bg-indigo-500'}`}
                     style={{ width: `${Math.min(100, goal.target ? (goal.progress / goal.target) * 100 : goal.progress)}%` }}
@@ -742,141 +891,167 @@ const Goals: React.FC<GoalsProps> = ({ goals, setGoals }) => {
                 </div>
               </div>
 
-              {/* Collapsed View Preview */}
-              {!isExpanded && (
-                <div
-                  onClick={() => toggleExpand(goal.id)}
-                  className="cursor-pointer p-3 bg-slate-900/50 rounded-xl hover:bg-slate-800/50 transition-colors border border-dashed border-slate-800 hover:border-indigo-500/30 flex items-center justify-between group/preview"
-                >
-                  <span className="text-xs text-slate-400 group-hover/preview:text-slate-200">
-                    {goal.activities.length} Activities & AI Insights
-                  </span>
-                  <Maximize2 className="w-3 h-3 text-slate-600 group-hover/preview:text-indigo-400" />
+              {/* Activities List - fully visible, no height cap */}
+              <div className="space-y-3 mb-6">
+                <div className="flex justify-between items-center">
+                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Key Activities</h4>
+                  <button
+                    onClick={() => setAddingActivityTo(goal.id)}
+                    className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300"
+                  >
+                    <Plus className="w-3 h-3" /> Add Activity
+                  </button>
                 </div>
-              )}
 
-              {/* Expanded Content */}
-              {isExpanded && (
-                <div className="space-y-6 animate-in fade-in slide-in-from-top-2 duration-200">
-
-                  {/* Activities List */}
-                  <div className="space-y-3">
-                    <div className="flex justify-between items-center">
-                      <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Key Activities</h4>
-                      <button
-                        onClick={() => setAddingActivityTo(goal.id)}
-                        className="text-xs flex items-center gap-1 text-indigo-400 hover:text-indigo-300"
-                      >
-                        <Plus className="w-3 h-3" /> Add Activity
-                      </button>
+                <div className="space-y-2">
+                  {/* New Activity Input */}
+                  {addingActivityTo === goal.id && (
+                    <div className="p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg animate-in fade-in">
+                      <input
+                        autoFocus
+                        placeholder="Activity name..."
+                        className="w-full bg-transparent border-b border-indigo-500/30 text-sm text-white focus:outline-none mb-2 pb-1"
+                        value={newActivityName}
+                        onChange={e => setNewActivityName(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleAddActivity(goal.id); }}
+                      />
+                      <div className="flex justify-between items-center">
+                        <div className="flex gap-2">
+                          <select
+                            value={newActivityFreq}
+                            onChange={(e) => setNewActivityFreq(e.target.value as any)}
+                            className="bg-slate-900 text-xs text-slate-300 rounded border border-slate-700 px-1 focus:outline-none"
+                          >
+                            <option value="Daily">Daily</option>
+                            <option value="Weekly">Weekly</option>
+                            <option value="Once">Once</option>
+                          </select>
+                          {newActivityFreq === 'Once' && (
+                            <input
+                              type="date"
+                              value={newActivityDeadline}
+                              onChange={(e) => setNewActivityDeadline(e.target.value)}
+                              className="bg-slate-900 text-xs text-slate-300 rounded border border-slate-700 px-1 w-24 focus:outline-none"
+                            />
+                          )}
+                        </div>
+                        <div className="flex gap-1">
+                          <button onClick={() => setAddingActivityTo(null)} className="p-1 text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
+                          <button onClick={() => handleAddActivity(goal.id)} className="p-1 text-indigo-400 hover:text-indigo-300"><Check className="w-4 h-4" /></button>
+                        </div>
+                      </div>
                     </div>
+                  )}
 
-                    <div className="space-y-2 overflow-y-auto pr-1 custom-scrollbar">
-                      {/* New Activity Input */}
-                      {addingActivityTo === goal.id && (
-                        <div className="p-3 bg-indigo-900/20 border border-indigo-500/30 rounded-lg animate-in fade-in">
-                          <input
-                            autoFocus
-                            placeholder="Activity name..."
-                            className="w-full bg-transparent border-b border-indigo-500/30 text-sm text-white focus:outline-none mb-2 pb-1"
-                            value={newActivityName}
-                            onChange={e => setNewActivityName(e.target.value)}
-                            onKeyDown={e => { if (e.key === 'Enter') handleAddActivity(goal.id); }}
-                          />
-                          <div className="flex justify-between items-center">
-                            <div className="flex gap-2">
-                              <select
-                                value={newActivityFreq}
-                                onChange={(e) => setNewActivityFreq(e.target.value as any)}
-                                className="bg-slate-900 text-xs text-slate-300 rounded border border-slate-700 px-1 focus:outline-none"
-                              >
-                                <option value="Daily">Daily</option>
-                                <option value="Weekly">Weekly</option>
-                                <option value="Once">Once</option>
-                              </select>
-                              {newActivityFreq === 'Once' && (
-                                <input
-                                  type="date"
-                                  value={newActivityDeadline}
-                                  onChange={(e) => setNewActivityDeadline(e.target.value)}
-                                  className="bg-slate-900 text-xs text-slate-300 rounded border border-slate-700 px-1 w-24 focus:outline-none"
-                                />
-                              )}
-                            </div>
-                            <div className="flex gap-1">
-                              <button onClick={() => setAddingActivityTo(null)} className="p-1 text-slate-400 hover:text-white"><X className="w-4 h-4" /></button>
-                              <button onClick={() => handleAddActivity(goal.id)} className="p-1 text-indigo-400 hover:text-indigo-300"><Check className="w-4 h-4" /></button>
-                            </div>
+                  {goal.activities.length === 0 && (
+                    <p className="text-sm text-slate-500 text-center py-4">No activities yet. Add one above!</p>
+                  )}
+
+                  {goal.activities.map(activity => (
+                    <div key={activity.id} className="group/act flex items-center justify-between p-2.5 hover:bg-slate-800/50 rounded-lg transition-colors border border-transparent hover:border-slate-700">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        <button
+                          onClick={() => toggleActivity(goal.id, activity.id)}
+                          className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all duration-300
+                              ${checkIsCompleted(activity) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-600 hover:border-indigo-500'}`}
+                        >
+                          {checkIsCompleted(activity) && <Check className="w-3 h-3" />}
+                        </button>
+                        <div className="min-w-0">
+                          <p className={`text-sm transition-all ${checkIsCompleted(activity) ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
+                            {activity.name}
+                          </p>
+                          <div className="flex items-center gap-2 text-[10px] text-slate-500">
+                            <span className="flex items-center gap-0.5"><TrendingUp className="w-3 h-3" /> {activity.frequency}</span>
+                            {activity.deadline && (
+                              <span className={`flex items-center gap-0.5 ${new Date(activity.deadline) < new Date() && !checkIsCompleted(activity) ? 'text-red-400' : ''}`}>
+                                <AlertCircle className="w-3 h-3" /> {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                              </span>
+                            )}
                           </div>
                         </div>
-                      )}
+                      </div>
 
-                      {goal.activities.map(activity => (
-                        <div key={activity.id} className="group flex items-center justify-between p-2 hover:bg-slate-800 rounded-lg transition-colors border border-transparent hover:border-slate-700">
-                          <div className="flex items-center gap-3 flex-1 overflow-hidden">
-                            <button
-                              onClick={() => toggleActivity(goal.id, activity.id)}
-                              className={`shrink-0 w-5 h-5 rounded border flex items-center justify-center transition-all duration-300
-                                  ${checkIsCompleted(activity) ? 'bg-emerald-500 border-emerald-500 text-white' : 'border-slate-600 hover:border-indigo-500'}`}
-                            >
-                              {checkIsCompleted(activity) && <Check className="w-3 h-3" />}
-                            </button>
-                            <div className="min-w-0">
-                              <p className={`text-sm truncate transition-all ${checkIsCompleted(activity) ? 'text-slate-500 line-through' : 'text-slate-300'}`}>
-                                {activity.name}
-                              </p>
-                              <div className="flex items-center gap-2 text-[10px] text-slate-500">
-                                <span className="flex items-center gap-0.5"><TrendingUp className="w-3 h-3" /> {activity.frequency}</span>
-                                {activity.deadline && (
-                                  <span className={`flex items-center gap-0.5 ${new Date(activity.deadline) < new Date() && !checkIsCompleted(activity) ? 'text-red-400' : ''}`}>
-                                    <AlertCircle className="w-3 h-3" /> {new Date(activity.deadline).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity px-2">
-                            <button onClick={() => deleteActivity(goal.id, activity.id)} className="text-slate-500 hover:text-red-400 transition-colors">
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                      <div className="flex items-center gap-1 opacity-0 group-hover/act:opacity-100 transition-opacity px-2">
+                        <button onClick={() => confirmDeleteActivity(goal.id, activity)} className="text-slate-500 hover:text-red-400 transition-colors">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* AI Recommendations */}
-                  <div className="bg-indigo-900/10 border border-indigo-500/20 rounded-xl p-4">
-                    <div className="flex justify-between items-center mb-3">
-                      <h4 className="text-xs font-bold text-indigo-400 uppercase flex items-center gap-2">
-                        <Sparkles className="w-3 h-3" /> Gemini Insights
-                      </h4>
-                      <button
-                        onClick={() => generateAdvice(goal)}
-                        disabled={loadingAI === goal.id}
-                        className="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded transition-colors"
-                      >
-                        {loadingAI === goal.id ? 'Generating...' : 'Refresh'}
-                      </button>
-                    </div>
-                    <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
-                      {goal.aiRecommendations ? goal.aiRecommendations.replace(/[*#]/g, '') : "Click refresh to generate actionable insights and identify pitfalls for this goal."}
-                    </p>
-                  </div>
-
-                  <div className="flex justify-center pt-2 border-t border-slate-800/50">
-                    <button onClick={() => toggleExpand(goal.id)} className="text-xs text-slate-500 hover:text-slate-300 flex items-center gap-1 transition-colors">
-                      <Minimize2 className="w-3 h-3" /> Collapse
-                    </button>
-                  </div>
-
+                  ))}
                 </div>
+              </div>
+
+              {/* AI Recommendations - fully visible */}
+              <div className="bg-indigo-900/10 border border-indigo-500/20 rounded-xl p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase flex items-center gap-2">
+                    <Sparkles className="w-3 h-3" /> Gemini Insights
+                  </h4>
+                  <button
+                    onClick={() => generateAdvice(goal)}
+                    disabled={loadingAI === goal.id}
+                    className="text-[10px] bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded transition-colors"
+                  >
+                    {loadingAI === goal.id ? 'Generating...' : 'Refresh'}
+                  </button>
+                </div>
+                <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line">
+                  {goal.aiRecommendations ? goal.aiRecommendations.replace(/[*#]/g, '') : "Click refresh to generate actionable insights and identify pitfalls for this goal."}
+                </p>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ===== DELETE CONFIRMATION MODAL ===== */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-6 w-full max-w-sm animate-in fade-in zoom-in-95">
+            <div className="text-center mb-6">
+              <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                <Trash2 className="w-6 h-6 text-red-400" />
+              </div>
+              <h3 className="text-lg font-bold text-white mb-1">Delete {deleteConfirm.type === 'goal' ? 'Goal' : 'Activity'}?</h3>
+              <p className="text-sm text-slate-400">Are you sure you want to delete <span className="text-white font-medium">"{deleteConfirm.name}"</span>?</p>
+              {deleteConfirm.type === 'goal' && (
+                <p className="text-xs text-slate-500 mt-1">All activities under this goal will also be removed.</p>
               )}
             </div>
-          );
-        })}
-      </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setDeleteConfirm(null)}
+                className="flex-1 px-4 py-2.5 text-slate-300 bg-slate-800 hover:bg-slate-700 rounded-xl font-medium transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={deleteConfirm.type === 'goal' ? executeDeleteGoal : executeDeleteActivity}
+                className="flex-1 px-4 py-2.5 text-white bg-red-600 hover:bg-red-700 rounded-xl font-medium transition-colors"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ===== UNDO TOAST ===== */}
+      {undoToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] animate-in fade-in slide-in-from-bottom-4">
+          <div className="bg-slate-800 border border-slate-600 rounded-xl px-5 py-3 flex items-center gap-4 shadow-2xl">
+            <span className="text-sm text-slate-200">{undoToast.message}</span>
+            <button
+              onClick={handleUndo}
+              className="flex items-center gap-1.5 text-indigo-400 hover:text-indigo-300 font-semibold text-sm transition-colors"
+            >
+              <Undo2 className="w-4 h-4" /> Undo
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
