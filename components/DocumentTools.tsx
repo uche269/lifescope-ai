@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
     FileUp, PenLine, Merge, Sparkles, FileText, Download,
     Loader2, Trash2, MessageCircle, ZoomIn, ZoomOut,
-    ChevronLeft, ChevronRight, type LucideIcon, Move, Send
+    ChevronLeft, ChevronRight, type LucideIcon, Move, Send, Image as ImageIcon
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { analyzeDocument, analyzeUrl, chatWithDocument, generateReport } from '../services/geminiService';
@@ -20,16 +20,17 @@ import 'react-pdf/dist/Page/TextLayer.css';
 
 interface DraggableItem {
     id: string;
-    type: 'text' | 'signature';
+    type: 'text' | 'signature' | 'image';
     x: number;
     y: number;
     page: number;
     text?: string;
     fontSize?: number;
     color?: string;
-    signatureData?: string;
+    imageData?: string; // data URL for signature or image items
     width?: number;
     height?: number;
+    mimeType?: string; // e.g. 'image/png' | 'image/jpeg' — used to choose embedPng vs embedJpg
 }
 
 const DocumentTools: React.FC = () => {
@@ -52,6 +53,9 @@ const DocumentTools: React.FC = () => {
     const [isDrawing, setIsDrawing] = useState(false);
     const [tempSignature, setTempSignature] = useState<string | null>(null);
     const [showSignPad, setShowSignPad] = useState(false);
+
+    // Image upload state
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     // Merge State
     const [mergeFiles, setMergeFiles] = useState<File[]>([]);
@@ -86,7 +90,14 @@ const DocumentTools: React.FC = () => {
         setPageNumber(1);
     };
 
-    const addItem = (type: 'text' | 'signature', data?: string) => {
+    const addItem = (
+        type: 'text' | 'signature' | 'image',
+        data?: string,
+        opts?: { width?: number; height?: number; mimeType?: string }
+    ) => {
+        const isImageLike = type === 'signature' || type === 'image';
+        const defaultW = type === 'signature' ? 150 : 200;
+        const defaultH = type === 'signature' ? 75 : 150;
         const newItem: DraggableItem = {
             id: Math.random().toString(36).substr(2, 9),
             type,
@@ -96,9 +107,10 @@ const DocumentTools: React.FC = () => {
             text: type === 'text' ? 'Double click to edit' : undefined,
             fontSize: 12,
             color: '#ef4444',
-            signatureData: data,
-            width: type === 'signature' ? 150 : undefined,
-            height: type === 'signature' ? 75 : undefined // Aspect ratio will be handled
+            imageData: data,
+            width: isImageLike ? (opts?.width ?? defaultW) : undefined,
+            height: isImageLike ? (opts?.height ?? defaultH) : undefined,
+            mimeType: opts?.mimeType,
         };
         setItems([...items, newItem]);
         setSelectedItemId(newItem.id);
@@ -162,20 +174,22 @@ const DocumentTools: React.FC = () => {
                         font,
                         color: rgb(r, g, b),
                     });
-                } else if (item.type === 'signature' && item.signatureData) {
-                    const pngImage = await pdfDoc.embedPng(item.signatureData);
-                    // Aspect ratio check
-                    const imgDims = pngImage.scale(1);
-                    // If we stored width/height in item (scaled by user zoom), divide by scale
-                    // But we set fixed width 150*scale initially? No, we store raw PDF dims usually?
-                    // Let's assume item.width is in DOM pixels.
+                } else if ((item.type === 'signature' || item.type === 'image') && item.imageData) {
+                    // Pick the right embed method based on MIME / data URL prefix.
+                    // pdf-lib only supports PNG and JPG; anything else we treat as PNG and let it throw.
+                    const isJpg = item.mimeType === 'image/jpeg'
+                        || item.imageData.startsWith('data:image/jpeg')
+                        || item.imageData.startsWith('data:image/jpg');
+                    const pdfImage = isJpg
+                        ? await pdfDoc.embedJpg(item.imageData)
+                        : await pdfDoc.embedPng(item.imageData);
 
                     const pdfImgWidth = (item.width || 150) / scale;
-                    const pdfImgHeight = (pngImage.height / pngImage.width) * pdfImgWidth;
+                    const pdfImgHeight = (pdfImage.height / pdfImage.width) * pdfImgWidth;
 
                     const pdfY = pageHeight - (item.y / scale) - pdfImgHeight;
 
-                    page.drawImage(pngImage, {
+                    page.drawImage(pdfImage, {
                         x: pdfX,
                         y: pdfY,
                         width: pdfImgWidth,
@@ -239,6 +253,93 @@ const DocumentTools: React.FC = () => {
             setTempSignature(null);
         }
     };
+
+    // --- Image Upload / Paste Logic ---
+    // Convert an image File into a data URL + natural dimensions, then drop it onto the page
+    // as a draggable 'image' item. Shared by the file picker and the clipboard paste listener.
+    const handleImageFile = (file: File) => {
+        if (!file.type.startsWith('image/')) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+            const dataUrl = reader.result as string;
+            const probe = new window.Image();
+            probe.onload = () => {
+                // Cap the initial display width so huge screenshots don't overflow the page.
+                const MAX_INITIAL_WIDTH = 300;
+                const naturalW = probe.naturalWidth || 200;
+                const naturalH = probe.naturalHeight || 150;
+                const width = Math.min(MAX_INITIAL_WIDTH, naturalW);
+                const height = (naturalH / naturalW) * width;
+                addItem('image', dataUrl, { width, height, mimeType: file.type });
+            };
+            probe.onerror = () => {
+                // Fallback if dimensions can't be read — still insert at default size
+                addItem('image', dataUrl, { mimeType: file.type });
+            };
+            probe.src = dataUrl;
+        };
+        reader.readAsDataURL(file);
+    };
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) handleImageFile(file);
+        // Reset input so the same file can be chosen again later
+        if (e.target) e.target.value = '';
+    };
+
+    // Corner-drag resize for image/signature items.
+    // `scale` is the current PDF zoom; `item.width` is stored in unscaled pixels,
+    // while mouse deltas are in on-screen pixels — so we divide by scale.
+    const startResize = (e: React.MouseEvent, itemId: string) => {
+        e.stopPropagation(); // don't let react-draggable grab this
+        e.preventDefault();
+        const startItem = items.find(i => i.id === itemId);
+        if (!startItem) return;
+        const startX = e.clientX;
+        const startWidth = startItem.width || 150;
+        const startHeight = startItem.height || 75;
+        const ratio = startHeight / startWidth;
+
+        const onMove = (ev: MouseEvent) => {
+            const delta = (ev.clientX - startX) / scale;
+            const newWidth = Math.max(40, startWidth + delta);
+            const newHeight = newWidth * ratio;
+            setItems(prev => prev.map(it =>
+                it.id === itemId ? { ...it, width: newWidth, height: newHeight } : it
+            ));
+        };
+        const onUp = () => {
+            document.removeEventListener('mousemove', onMove);
+            document.removeEventListener('mouseup', onUp);
+        };
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+    };
+
+    // Clipboard paste: only listen while a PDF is loaded so we don't swallow
+    // pastes elsewhere in the app (e.g. the chat input on the Chat tab).
+    useEffect(() => {
+        if (!pdfFile) return;
+        const onPaste = (e: ClipboardEvent) => {
+            const clipboardItems = e.clipboardData?.items;
+            if (!clipboardItems) return;
+            for (let i = 0; i < clipboardItems.length; i++) {
+                const ci = clipboardItems[i];
+                if (ci.type.startsWith('image/')) {
+                    const file = ci.getAsFile();
+                    if (file) {
+                        e.preventDefault();
+                        handleImageFile(file);
+                    }
+                    break;
+                }
+            }
+        };
+        document.addEventListener('paste', onPaste);
+        return () => document.removeEventListener('paste', onPaste);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [pdfFile, pageNumber, items]);
 
     // --- Merge Logic (Legacy) ---
     const handleMerge = async () => {
@@ -892,6 +993,16 @@ const DocumentTools: React.FC = () => {
                                 <button onClick={() => addItem('text')} className="flex items-center gap-2 px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 rounded-lg text-xs font-medium border border-indigo-500/30">
                                     <FileText className="w-3 h-3" /> Add Text
                                 </button>
+                                <button onClick={() => imageInputRef.current?.click()} className="flex items-center gap-2 px-3 py-1.5 bg-sky-500/10 hover:bg-sky-500/20 text-sky-300 rounded-lg text-xs font-medium border border-sky-500/30" title="Upload an image, or paste one with Ctrl+V">
+                                    <ImageIcon className="w-3 h-3" /> Add Image
+                                </button>
+                                <input
+                                    ref={imageInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleImageUpload}
+                                />
                                 <button onClick={() => setShowSignPad(true)} className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 rounded-lg text-xs font-medium border border-emerald-500/30">
                                     <PenLine className="w-3 h-3" /> Add Signature
                                 </button>
@@ -931,6 +1042,27 @@ const DocumentTools: React.FC = () => {
                                             />
                                         </>
                                     )}
+                                    {(() => {
+                                        const sel = items.find(i => i.id === selectedItemId);
+                                        if (!sel || (sel.type !== 'signature' && sel.type !== 'image')) return null;
+                                        return (
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-xs text-slate-500">Width:</span>
+                                                <input
+                                                    type="number"
+                                                    min={40}
+                                                    value={Math.round(sel.width || 150)}
+                                                    onChange={(e) => {
+                                                        const newW = parseInt(e.target.value) || 150;
+                                                        const ratio = (sel.height || 1) / (sel.width || 1);
+                                                        updateItem(selectedItemId, { width: newW, height: newW * ratio });
+                                                    }}
+                                                    className="bg-slate-950 border border-slate-700 rounded-lg px-2 py-1 text-xs text-white w-20"
+                                                />
+                                                <span className="text-xs text-slate-500">px</span>
+                                            </div>
+                                        );
+                                    })()}
                                     <button onClick={() => deleteItem(selectedItemId)} className="ml-auto text-red-400 hover:text-red-300 px-2 flex items-center gap-1 text-xs font-medium">
                                         <Trash2 className="w-3 h-3" /> Delete
                                     </button>
@@ -979,8 +1111,8 @@ const DocumentTools: React.FC = () => {
                                                             <span className="whitespace-nowrap px-1">{item.text}</span>
                                                         ) : (
                                                             <img
-                                                                src={item.signatureData}
-                                                                alt="sig"
+                                                                src={item.imageData}
+                                                                alt={item.type === 'signature' ? 'sig' : 'img'}
                                                                 style={{
                                                                     width: `${(item.width || 150) * scale}px`,
                                                                     height: 'auto',
@@ -989,11 +1121,20 @@ const DocumentTools: React.FC = () => {
                                                                 draggable={false} // Prevent browser image drag
                                                             />
                                                         )}
-                                                        {/* Handle/Indicator */}
+                                                        {/* Move indicator (top-right) */}
                                                         {selectedItemId === item.id && (
                                                             <div className="absolute -top-3 -right-3 w-4 h-4 bg-indigo-500 rounded-full flex items-center justify-center text-white shadow-sm scale-0 group-hover:scale-100 transition-transform disabled">
                                                                 <Move className="w-2 h-2" />
                                                             </div>
+                                                        )}
+                                                        {/* Resize handle (bottom-right) — only for image/signature */}
+                                                        {selectedItemId === item.id && (item.type === 'signature' || item.type === 'image') && (
+                                                            <div
+                                                                onMouseDown={(e) => startResize(e, item.id)}
+                                                                className="absolute -bottom-1.5 -right-1.5 w-3 h-3 bg-indigo-500 border border-white rounded-sm shadow cursor-nwse-resize"
+                                                                style={{ pointerEvents: 'auto' }}
+                                                                title="Drag to resize"
+                                                            />
                                                         )}
                                                     </div>
                                                 </Draggable>
