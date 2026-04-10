@@ -1,3 +1,7 @@
 getlifescope.com, www.getlifescope.com {
     reverse_proxy app:3000
 }
+
+n8n.getlifescope.com {
+    reverse_proxy n8n:5678
+}
